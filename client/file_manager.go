@@ -5,20 +5,41 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/common"
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/protocol"
 )
 
+// Handles reading and parsing CSV files for different dataset files
 type FileManager struct {
-	agency string
-	file   *os.File
-	reader *csv.Reader
+	datasetType protocol.DatasetType
+	file        *os.File
+	reader      *csv.Reader
 }
 
-func NewFileManager(agency string, csvFilePath string) (*FileManager, error) {
+func NewMenuItemFileManager(csvFilePath string) (*FileManager, error) {
+	return newFileManager(protocol.DatasetMenuItems, csvFilePath)
+}
+
+func NewStoreFileManager(csvFilePath string) (*FileManager, error) {
+	return newFileManager(protocol.DatasetStores, csvFilePath)
+}
+
+func NewTransactionItemFileManager(csvFilePath string) (*FileManager, error) {
+	return newFileManager(protocol.DatasetTransactionItems, csvFilePath)
+}
+
+func NewTransactionFileManager(csvFilePath string) (*FileManager, error) {
+	return newFileManager(protocol.DatasetTransactions, csvFilePath)
+}
+
+func NewUserFileManager(csvFilePath string) (*FileManager, error) {
+	return newFileManager(protocol.DatasetUsers, csvFilePath)
+}
+
+// Common constructor logic
+func newFileManager(datasetType protocol.DatasetType, csvFilePath string) (*FileManager, error) {
 	file, err := os.Open(csvFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %s | %v", csvFilePath, err)
@@ -28,100 +49,178 @@ func NewFileManager(agency string, csvFilePath string) (*FileManager, error) {
 	reader.FieldsPerRecord = 0
 
 	return &FileManager{
-		agency: agency,
-		file:   file,
-		reader: reader,
+		datasetType: datasetType,
+		file:        file,
+		reader:      reader,
 	}, nil
 }
 
-func (f *FileManager) NextRecord() (protocol.BetMessage, bool, error) {
+func (f *FileManager) NextRecord() (protocol.Record, bool, error) {
 	for {
 		line, err := f.reader.Read()
 		if err != nil {
 			if err == io.EOF {
-				return protocol.BetMessage{}, true, nil // EOF reached
+				return nil, true, nil // EOF reached
 			}
-			return protocol.BetMessage{}, false, fmt.Errorf("failed to read from file | %v", err)
+			return nil, false, fmt.Errorf("failed to read from file | %v", err)
 		}
 
-		// Validate and create bet message
-		bet, err := f.createValidBetMessage(line)
+		// Create record based on dataset type
+		record, err := f.createRecord(line)
 		if err != nil {
 			// Skip invalid records, continue to next
 			continue
 		}
 
-		return bet, false, nil
+		return record, false, nil
 	}
 }
 
 func (f *FileManager) Close() {
 	err := f.file.Close()
 	if err != nil {
-		_= fmt.Errorf("failed to close file | %v", err)
+		_ = fmt.Errorf("failed to close file | %v", err)
 	}
 }
 
-// createValidBetMessage validates a CSV record and creates a BetMessage
-func (f *FileManager) createValidBetMessage(record []string) (protocol.BetMessage, error) {
-	// Validate record using validation logic
-	var numeroApostado int
-	if err := f.validateBetRecord(record, &numeroApostado); err != nil {
-		return protocol.BetMessage{}, err
+// Creates the appropriate record type based on dataset type
+func (f *FileManager) createRecord(line []string) (protocol.Record, error) {
+	switch f.datasetType {
+	case protocol.DatasetMenuItems:
+		return f.createMenuItemRecord(line)
+	case protocol.DatasetStores:
+		return f.createStoreRecord(line)
+	case protocol.DatasetTransactionItems:
+		return f.createTransactionItemRecord(line)
+	case protocol.DatasetTransactions:
+		return f.createTransactionRecord(line)
+	case protocol.DatasetUsers:
+		return f.createUserRecord(line)
+	default:
+		return nil, fmt.Errorf("unsupported dataset type: %d", f.datasetType)
 	}
-
-	// Create bet message 
-	bet := protocol.BetMessage{
-		Type:       protocol.MessageTypeBet,
-		Nombre:     record[common.CSV_INDEX_NOMBRE],
-		Apellido:   record[common.CSV_INDEX_APELLIDO],
-		Documento:  record[common.CSV_INDEX_DOCUMENTO],
-		Nacimiento: record[common.CSV_INDEX_NACIMIENTO],
-		Numero:     numeroApostado,
-	}
-
-	return bet, nil
 }
 
-// validateBetRecord validates a CSV record (adapted from client.go)
-func (f *FileManager) validateBetRecord(record []string, numeroAux *int) error {
-	// Check basic format: must have exactly 5 fields
-	if len(record) != common.EXPECTED_CSV_FIELDS {
-		return fmt.Errorf("expected %d fields, got %d", common.EXPECTED_CSV_FIELDS, len(record))
+func (f *FileManager) createMenuItemRecord(record []string) (protocol.MenuItemRecord, error) {
+	if len(record) != common.EXPECTED_MENU_ITEMS_FIELDS {
+		return protocol.MenuItemRecord{}, fmt.Errorf("expected %d fields, got %d", common.EXPECTED_MENU_ITEMS_FIELDS, len(record))
 	}
 
-	// Check for empty or whitespace-only fields
-	for i, field := range record[:common.CSV_INDEX_NUMERO] {
-		trimmed := strings.TrimSpace(field)
-		if trimmed == "" {
-			return fmt.Errorf("field %d is empty or whitespace", i)
+	for i := range record {
+		record[i] = strings.TrimSpace(record[i])
+		if record[i] == "" {
+			return protocol.MenuItemRecord{}, fmt.Errorf("field %d is empty", i)
 		}
-		record[i] = trimmed // Update with trimmed value
 	}
 
-	// Validate field lengths
-	if len(record[common.CSV_INDEX_NOMBRE]) > common.MAX_NOMBRE_BYTES {
-		return fmt.Errorf("%s exceeds %d bytes: %d", common.FIELD_NOMBRE, common.MAX_NOMBRE_BYTES, len(record[common.CSV_INDEX_NOMBRE]))
+	if len(record[common.CSV_ITEM_NAME]) > common.MAX_ITEM_NAME_BYTES {
+		return protocol.MenuItemRecord{}, fmt.Errorf("item_name exceeds %d bytes: %d", common.MAX_ITEM_NAME_BYTES, len(record[common.CSV_ITEM_NAME]))
 	}
-	if len(record[common.CSV_INDEX_APELLIDO]) > common.MAX_APELLIDO_BYTES {
-		return fmt.Errorf("%s exceeds %d bytes: %d", common.FIELD_APELLIDO, common.MAX_APELLIDO_BYTES, len(record[common.CSV_INDEX_APELLIDO]))
-	}
-	if len(record[common.CSV_INDEX_DOCUMENTO]) > common.MAX_DOCUMENTO_BYTES {
-		return fmt.Errorf("%s exceeds %d bytes: %d", common.FIELD_DOCUMENTO, common.MAX_DOCUMENTO_BYTES, len(record[common.CSV_INDEX_DOCUMENTO]))
-	}
-	if len(record[common.CSV_INDEX_NACIMIENTO]) > common.MAX_NACIMIENTO_BYTES {
-		return fmt.Errorf("%s exceeds %d bytes: %d", common.FIELD_NACIMIENTO, common.MAX_NACIMIENTO_BYTES, len(record[common.CSV_INDEX_NACIMIENTO]))
+	if len(record[common.CSV_CATEGORY]) > common.MAX_CATEGORY_BYTES {
+		return protocol.MenuItemRecord{}, fmt.Errorf("category exceeds %d bytes: %d", common.MAX_CATEGORY_BYTES, len(record[common.CSV_CATEGORY]))
 	}
 
-	// Validate numero_apostado field
-	numero, err := strconv.Atoi(strings.TrimSpace(record[common.CSV_INDEX_NUMERO]))
-	if err != nil {
-		return fmt.Errorf("invalid %s: %s", common.FIELD_NUMERO, record[common.CSV_INDEX_NUMERO])
-	}
-	if numero < common.MIN_NUMERO || numero > common.MAX_NUMERO {
-		return fmt.Errorf("%s out of range [%d-%d]: %d", common.FIELD_NUMERO, common.MIN_NUMERO, common.MAX_NUMERO, numero)
+	return protocol.MenuItemRecord{
+		ItemID:        record[common.CSV_MENU_ITEM_ID],
+		ItemName:      record[common.CSV_ITEM_NAME],
+		Category:      record[common.CSV_CATEGORY],
+		Price:         record[common.CSV_PRICE],
+		IsSeasonal:    record[common.CSV_IS_SEASONAL],
+		AvailableFrom: record[common.CSV_AVAILABLE_FROM],
+		AvailableTo:   record[common.CSV_AVAILABLE_TO],
+	}, nil
+}
+
+// createStoreRecord creates and validates a StoreRecord
+func (f *FileManager) createStoreRecord(record []string) (protocol.StoreRecord, error) {
+	if len(record) != common.EXPECTED_STORES_FIELDS {
+		return protocol.StoreRecord{}, fmt.Errorf("expected %d fields, got %d", common.EXPECTED_STORES_FIELDS, len(record))
 	}
 
-	*numeroAux = numero
-	return nil
+	// Trim whitespace from all fields
+	for i := range record {
+		record[i] = strings.TrimSpace(record[i])
+		if record[i] == "" {
+			return protocol.StoreRecord{}, fmt.Errorf("field %d is empty", i)
+		}
+	}
+
+	return protocol.StoreRecord{
+		StoreID:    record[common.CSV_STORE_ID],
+		StoreName:  record[common.CSV_STORE_NAME],
+		Street:     record[common.CSV_STREET],
+		PostalCode: record[common.CSV_POSTAL_CODE],
+		City:       record[common.CSV_CITY],
+		State:      record[common.CSV_STATE],
+		Latitude:   record[common.CSV_LATITUDE],
+		Longitude:  record[common.CSV_LONGITUDE],
+	}, nil
+}
+
+func (f *FileManager) createTransactionItemRecord(record []string) (protocol.TransactionItemRecord, error) {
+	if len(record) != common.EXPECTED_TRANSACTION_ITEMS_FIELDS {
+		return protocol.TransactionItemRecord{}, fmt.Errorf("expected %d fields, got %d", common.EXPECTED_TRANSACTION_ITEMS_FIELDS, len(record))
+	}
+
+	// Trim whitespace from all fields
+	for i := range record {
+		record[i] = strings.TrimSpace(record[i])
+		if record[i] == "" {
+			return protocol.TransactionItemRecord{}, fmt.Errorf("field %d is empty", i)
+		}
+	}
+
+	return protocol.TransactionItemRecord{
+		TransactionID: record[common.CSV_TXN_ITEM_TRANSACTION_ID],
+		ItemID:        record[common.CSV_TXN_ITEM_ITEM_ID],
+		Quantity:      record[common.CSV_TXN_ITEM_QUANTITY],
+		UnitPrice:     record[common.CSV_TXN_ITEM_UNIT_PRICE],
+		Subtotal:      record[common.CSV_TXN_ITEM_SUBTOTAL],
+		CreatedAt:     record[common.CSV_TXN_ITEM_CREATED_AT],
+	}, nil
+}
+
+func (f *FileManager) createTransactionRecord(record []string) (protocol.TransactionRecord, error) {
+	if len(record) != common.EXPECTED_TRANSACTIONS_FIELDS {
+		return protocol.TransactionRecord{}, fmt.Errorf("expected %d fields, got %d", common.EXPECTED_TRANSACTIONS_FIELDS, len(record))
+	}
+
+	for i := range record {
+		record[i] = strings.TrimSpace(record[i])
+		if record[i] == "" {
+			return protocol.TransactionRecord{}, fmt.Errorf("field %d is empty", i)
+		}
+	}
+
+	return protocol.TransactionRecord{
+		TransactionID:   record[common.CSV_TXN_TRANSACTION_ID],
+		StoreID:         record[common.CSV_TXN_STORE_ID],
+		PaymentMethodID: record[common.CSV_TXN_PAYMENT_METHOD_ID],
+		VoucherID:       record[common.CSV_TXN_VOUCHER_ID],
+		UserID:          record[common.CSV_TXN_USER_ID],
+		OriginalAmount:  record[common.CSV_TXN_ORIGINAL_AMOUNT],
+		DiscountApplied: record[common.CSV_TXN_DISCOUNT_APPLIED],
+		FinalAmount:     record[common.CSV_TXN_FINAL_AMOUNT],
+		CreatedAt:       record[common.CSV_TXN_CREATED_AT],
+	}, nil
+}
+
+func (f *FileManager) createUserRecord(record []string) (protocol.UserRecord, error) {
+	if len(record) != common.EXPECTED_USERS_FIELDS {
+		return protocol.UserRecord{}, fmt.Errorf("expected %d fields, got %d", common.EXPECTED_USERS_FIELDS, len(record))
+	}
+
+	for i := range record {
+		record[i] = strings.TrimSpace(record[i])
+		if record[i] == "" {
+			return protocol.UserRecord{}, fmt.Errorf("field %d is empty", i)
+		}
+	}
+
+	return protocol.UserRecord{
+		UserID:       record[common.CSV_USER_ID],
+		Gender:       record[common.CSV_GENDER],
+		Birthdate:    record[common.CSV_BIRTHDATE],
+		RegisteredAt: record[common.CSV_REGISTERED_AT],
+	}, nil
 }
