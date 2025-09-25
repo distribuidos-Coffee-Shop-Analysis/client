@@ -19,6 +19,8 @@ type Listener struct {
 	log       *logging.Logger
 }
 
+const TOTAL_QUERIES_EXPECTED = 4
+
 // NewListener creates a new Listener instance
 func NewListener(conn net.Conn, clientID string, outputDir string) *Listener {
 	return &Listener{
@@ -47,9 +49,8 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 	}()
 
 	queriesCompleted := make(map[protocol.DatasetType]bool)
-	totalQueriesExpected := 4
 
-	for len(queriesCompleted) < totalQueriesExpected {
+	for len(queriesCompleted) < TOTAL_QUERIES_EXPECTED {
 		select {
 		case <-shutdownChan:
 			l.log.Infof("action: receive_queries | result: shutdown | client_id: %v", l.clientID)

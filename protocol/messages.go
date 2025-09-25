@@ -29,8 +29,6 @@ type Record interface {
 	GetType() DatasetType
 }
 
-// represents a menu item dataset record
-// Columns: item_id,item_name,category,price,is_seasonal,available_from,available_to
 type MenuItemRecord struct {
 	ItemID        string
 	ItemName      string
@@ -50,8 +48,6 @@ func (m MenuItemRecord) GetType() DatasetType {
 	return DatasetMenuItems
 }
 
-// represents a store dataset record
-// Columns: store_id,store_name,street,postal_code,city,state,latitude,longitude
 type StoreRecord struct {
 	StoreID    string
 	StoreName  string
@@ -72,8 +68,6 @@ func (s StoreRecord) GetType() DatasetType {
 	return DatasetStores
 }
 
-// represents a transaction item dataset record
-// Columns: transaction_id,item_id,quantity,unit_price,subtotal,created_at
 type TransactionItemRecord struct {
 	TransactionID string
 	ItemID        string
@@ -92,8 +86,6 @@ func (t TransactionItemRecord) GetType() DatasetType {
 	return DatasetTransactionItems
 }
 
-// represents a transaction dataset record
-// Columns: transaction_id,store_id,payment_method_id,voucher_id,user_id,original_amount,discount_applied,final_amount,created_at
 type TransactionRecord struct {
 	TransactionID   string
 	StoreID         string
@@ -116,8 +108,6 @@ func (t TransactionRecord) GetType() DatasetType {
 	return DatasetTransactions
 }
 
-// represents a user dataset record
-// Columns: user_id,gender,birthdate,registered_at
 type UserRecord struct {
 	UserID       string
 	Gender       string
