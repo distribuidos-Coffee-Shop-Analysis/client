@@ -2,10 +2,10 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -22,19 +22,17 @@ type ClientConfig struct {
 	ServerAddress  string
 	LoopAmount     int
 	LoopPeriod     time.Duration
-	CSVFile        string
+	DatasetPaths   map[protocol.DatasetType]string
 	BatchMaxAmount int
-	Agency         int
+	OutputDir      string
 }
 
-// Client Entity that encapsulates how
 type Client struct {
-	config            ClientConfig
-	conn              net.Conn
-	shutdownChan      chan struct{} 
-	writer            *Writer
-	listener          *Listener
-	fileManager       *FileManager
+	config       ClientConfig
+	conn         net.Conn
+	shutdownChan chan struct{}
+	writer       *Writer
+	listener     *Listener
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -76,16 +74,8 @@ func (c *Client) initClient() error {
 		return err
 	}
 
-	// Initialize Writer and Listener
-	c.writer = NewWriter(c.conn, c.config.Agency, c.config.ID)
-	c.listener = NewListener(c.conn, c.config.Agency, c.config.ID)
-
-	// Initialize FileManager
-	fileManager, err := NewFileManager(strconv.Itoa(c.config.Agency), c.config.CSVFile)
-	if err != nil {
-		return err
-	}
-	c.fileManager = fileManager
+	c.writer = NewWriter(c.conn, c.config.ID)
+	c.listener = NewListener(c.conn, c.config.ID, c.config.OutputDir)
 
 	return nil
 }
@@ -105,23 +95,84 @@ func (c *Client) createClientSocket() error {
 }
 
 // Main function:
-// It processes the CSV file in streaming mode. Just store one batch in memory at a time
-// Once the CSV is fully processed (all valid bets sent), asks the server for the winners
+// It processes the CSV files in streaming mode. Just store one batch in memory at a time
+// Once the CSVs are fully processed, listen from the server for the query responses.
 // Finally, we close the connection and the CSV file
-func (c *Client) StartClientWithCSV() {
-	defer c.conn.Close() // Close the connection
-	defer c.fileManager.Close() // Close the file
 
-	var currentBatch []protocol.BetMessage
+func (c *Client) StartClientWithDatasets() {
+	defer c.conn.Close() // Close the connection
+
+	for datasetType, csvPath := range c.config.DatasetPaths {
+		select {
+		case <-c.shutdownChan:
+			log.Infof("action: shutdown_received | result: exiting_datasets | client_id: %v", c.config.ID)
+			return
+		default:
+		}
+
+		log.Infof("action: process_dataset | result: start | client_id: %v | dataset_type: %d | file: %s",
+			c.config.ID, datasetType, csvPath)
+
+		if err := c.processDataset(datasetType, csvPath); err != nil {
+			log.Errorf("action: process_dataset | result: fail | client_id: %v | dataset_type: %d | error: %v",
+				c.config.ID, datasetType, err)
+			return
+		}
+
+		log.Infof("action: process_dataset | result: success | client_id: %v | dataset_type: %d",
+			c.config.ID, datasetType)
+	}
+
+	log.Infof("action: process_all_datasets | result: success | client_id: %v", c.config.ID)
+
+	// After sending all datasets, start listening for query responses
+	log.Infof("action: start_listening | result: start | client_id: %v | msg: waiting for query responses", c.config.ID)
+	if err := c.listener.ReceiveQueryResponses(c.shutdownChan); err != nil {
+		log.Errorf("action: receive_queries | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+
+	log.Infof("action: start_listening | result: success | client_id: %v | msg: all query responses received", c.config.ID)
+}
+
+func (c *Client) processDataset(datasetType protocol.DatasetType, csvPath string) error {
+	// Create appropriate FileManager based on dataset type
+	fileManager, err := c.createFileManager(datasetType, csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file manager: %w", err)
+	}
+	defer fileManager.Close()
+
+	return c.processRecordsFromFile(datasetType, fileManager)
+}
+
+func (c *Client) createFileManager(datasetType protocol.DatasetType, csvPath string) (*FileManager, error) {
+	switch datasetType {
+	case protocol.DatasetMenuItems:
+		return NewMenuItemFileManager(csvPath)
+	case protocol.DatasetStores:
+		return NewStoreFileManager(csvPath)
+	case protocol.DatasetTransactionItems:
+		return NewTransactionItemFileManager(csvPath)
+	case protocol.DatasetTransactions:
+		return NewTransactionFileManager(csvPath)
+	case protocol.DatasetUsers:
+		return NewUserFileManager(csvPath)
+	default:
+		return nil, fmt.Errorf("unsupported dataset type: %d", datasetType)
+	}
+}
+
+func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileManager *FileManager) error {
+	var currentBatch []protocol.Record
 	validCount := 0
 
 	for {
 		select {
 		case <-c.shutdownChan:
 			log.Infof("action: shutdown_received | result: exiting_loop | client_id: %v", c.config.ID)
-			return
+			return nil
 		default:
-			
 		}
 
 		// Check if we've reached the maximum number of valid records
@@ -132,47 +183,120 @@ func (c *Client) StartClientWithCSV() {
 		}
 
 		// Get next valid record
-		bet, isEOF, err := c.fileManager.NextRecord()
+		record, isEOF, err := fileManager.NextRecord()
 		if err != nil {
 			log.Errorf("action: read_csv_streaming | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return
+			return err
 		}
 		if isEOF {
 			break
 		}
 
-		// Check if adding this bet would exceed size or count limits
-		testBatch := append(currentBatch, bet)
-		batchSize := c.writer.CalculateMessageSize(testBatch)
+		// Check if adding this record would exceed size or count limits
+		testBatch := append(currentBatch, record)
+		batchSize := c.calculateBatchSize(datasetType, testBatch)
 
 		if len(testBatch) > c.config.BatchMaxAmount || batchSize > common.MAX_BATCH_SIZE_BYTES {
-			err := c.writer.SendBatch(currentBatch, false)
-			if errors.Is(err, syscall.EPIPE) {
-				log.Infof("Connection closed by server (broken pipe)")
-				return 
+			if err := c.sendBatch(datasetType, currentBatch, false); err != nil {
+				if errors.Is(err, syscall.EPIPE) {
+					log.Infof("Connection closed by server (broken pipe)")
+					return err
+				}
+				return err
 			}
-			// Start new batch with current bet
-			currentBatch = []protocol.BetMessage{bet}
+			// Start new batch with current record
+			currentBatch = []protocol.Record{record}
 		} else {
-			// Add to current batch cause it doesn't exceed limits
+			// Add to current batch as it doesn't exceed limits
 			currentBatch = testBatch
 		}
 
 		validCount++
 	}
 
-
+	// Send final batch if there are remaining records
 	if len(currentBatch) > 0 {
-		err := c.writer.SendBatch(currentBatch, true) // EOF = true for the last batch
-		if err != nil { 
+		if err := c.sendBatch(datasetType, currentBatch, true); err != nil {
 			log.Errorf("action: send_last_batch | result: fail | client_id: %v | error: %v", c.config.ID, err)
-			return // Could not send last batch
+			return err
 		}
-		c.listener.RequestWinners(c.shutdownChan)
-		
-	
-		log.Infof("action: csv_streaming_finished | result: success | client_id: %v | valid_records: %d",
-			c.config.ID, validCount)
 	}
 
+	log.Infof("action: csv_streaming_finished | result: success | client_id: %v | valid_records: %d | dataset_type: %d",
+		c.config.ID, validCount, datasetType)
+	return nil
+}
+
+func (c *Client) calculateBatchSize(datasetType protocol.DatasetType, records []protocol.Record) int {
+	switch datasetType {
+	case protocol.DatasetMenuItems:
+		menuItems := make([]protocol.MenuItemRecord, len(records))
+		for i, record := range records {
+			menuItems[i] = record.(protocol.MenuItemRecord)
+		}
+		return c.writer.CalculateMenuItemBatchSize(menuItems)
+	case protocol.DatasetStores:
+		stores := make([]protocol.StoreRecord, len(records))
+		for i, record := range records {
+			stores[i] = record.(protocol.StoreRecord)
+		}
+		return c.writer.CalculateStoreBatchSize(stores)
+	case protocol.DatasetTransactionItems:
+		txnItems := make([]protocol.TransactionItemRecord, len(records))
+		for i, record := range records {
+			txnItems[i] = record.(protocol.TransactionItemRecord)
+		}
+		return c.writer.CalculateTransactionItemBatchSize(txnItems)
+	case protocol.DatasetTransactions:
+		transactions := make([]protocol.TransactionRecord, len(records))
+		for i, record := range records {
+			transactions[i] = record.(protocol.TransactionRecord)
+		}
+		return c.writer.CalculateTransactionBatchSize(transactions)
+	case protocol.DatasetUsers:
+		users := make([]protocol.UserRecord, len(records))
+		for i, record := range records {
+			users[i] = record.(protocol.UserRecord)
+		}
+		return c.writer.CalculateUserBatchSize(users)
+	default:
+		return 0
+	}
+}
+
+func (c *Client) sendBatch(datasetType protocol.DatasetType, records []protocol.Record, eof bool) error {
+	switch datasetType {
+	case protocol.DatasetMenuItems:
+		menuItems := make([]protocol.MenuItemRecord, len(records))
+		for i, record := range records {
+			menuItems[i] = record.(protocol.MenuItemRecord)
+		}
+		return c.writer.SendMenuItemBatch(menuItems, eof)
+	case protocol.DatasetStores:
+		stores := make([]protocol.StoreRecord, len(records))
+		for i, record := range records {
+			stores[i] = record.(protocol.StoreRecord)
+		}
+		return c.writer.SendStoreBatch(stores, eof)
+	case protocol.DatasetTransactionItems:
+		txnItems := make([]protocol.TransactionItemRecord, len(records))
+		for i, record := range records {
+			txnItems[i] = record.(protocol.TransactionItemRecord)
+		}
+		return c.writer.SendTransactionItemBatch(txnItems, eof)
+	case protocol.DatasetTransactions:
+		transactions := make([]protocol.TransactionRecord, len(records))
+		for i, record := range records {
+			transactions[i] = record.(protocol.TransactionRecord)
+		}
+		return c.writer.SendTransactionBatch(transactions, eof)
+	case protocol.DatasetUsers:
+		users := make([]protocol.UserRecord, len(records))
+		for i, record := range records {
+			users[i] = record.(protocol.UserRecord)
+		}
+		return c.writer.SendUserBatch(users, eof)
+	default:
+		return fmt.Errorf("unsupported dataset type: %d", datasetType)
+	}
 }

@@ -17,6 +17,10 @@ const (
 	DatasetTransactionItems DatasetType = 3
 	DatasetTransactions     DatasetType = 4
 	DatasetUsers            DatasetType = 5
+	DatasetQ1               DatasetType = 6
+	DatasetQ2               DatasetType = 7
+	DatasetQ3               DatasetType = 8
+	DatasetQ4               DatasetType = 9
 )
 
 // Record interface that all dataset records must implement
@@ -128,6 +132,66 @@ func (u UserRecord) Serialize() string {
 
 func (u UserRecord) GetType() DatasetType {
 	return DatasetUsers
+}
+
+// Query response records
+
+// Q1:  transaction_id, final_amount
+type Q1Record struct {
+	TransactionID string
+	FinalAmount   string
+}
+
+func (q Q1Record) Serialize() string {
+	return fmt.Sprintf("%s|%s", q.TransactionID, q.FinalAmount)
+}
+
+func (q Q1Record) GetType() DatasetType {
+	return DatasetQ1
+}
+
+// Q2: year_month_created_at, item_name, sellings_qty
+type Q2Record struct {
+	YearMonthCreatedAt string
+	ItemName           string
+	SellingsQty        string
+}
+
+func (q Q2Record) Serialize() string {
+	return fmt.Sprintf("%s|%s|%s", q.YearMonthCreatedAt, q.ItemName, q.SellingsQty)
+}
+
+func (q Q2Record) GetType() DatasetType {
+	return DatasetQ2
+}
+
+// Q3: year_half_created_at, store_name, tpv
+type Q3Record struct {
+	YearHalfCreatedAt string
+	StoreName         string
+	TPV               string
+}
+
+func (q Q3Record) Serialize() string {
+	return fmt.Sprintf("%s|%s|%s", q.YearHalfCreatedAt, q.StoreName, q.TPV)
+}
+
+func (q Q3Record) GetType() DatasetType {
+	return DatasetQ3
+}
+
+// Q4: store_name, birthdate
+type Q4Record struct {
+	StoreName string
+	Birthdate string
+}
+
+func (q Q4Record) Serialize() string {
+	return fmt.Sprintf("%s|%s", q.StoreName, q.Birthdate)
+}
+
+func (q Q4Record) GetType() DatasetType {
+	return DatasetQ4
 }
 
 type BatchMessage struct {
