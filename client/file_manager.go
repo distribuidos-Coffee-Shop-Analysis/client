@@ -48,6 +48,13 @@ func newFileManager(datasetType protocol.DatasetType, csvFilePath string) (*File
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = 0
 
+	// Skip the header line
+	_, err = reader.Read()
+	if err != nil {
+		file.Close()
+		return nil, fmt.Errorf("failed to read header from file %s | %v", csvFilePath, err)
+	}
+
 	return &FileManager{
 		datasetType: datasetType,
 		file:        file,
