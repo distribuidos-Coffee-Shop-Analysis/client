@@ -8,6 +8,7 @@ import (
 
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/client"
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/common"
+	"github.com/distribuidos-Coffee-Shop-Analysis/client/protocol"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -32,13 +33,20 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Add env variables supported
-	v.BindEnv("csv", "file") // For CLI_CSV_FILE
 	v.BindEnv("batch", "maxAmount")
 	v.BindEnv("id")
 	v.BindEnv("server", "address")
 	v.BindEnv("loop", "period")
 	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
+	v.BindEnv("output", "dir")
+
+	// Dataset paths
+	v.BindEnv("datasets", "menuItems")
+	v.BindEnv("datasets", "stores")
+	v.BindEnv("datasets", "transactionItems")
+	v.BindEnv("datasets", "transactions")
+	v.BindEnv("datasets", "users")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -105,13 +113,22 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	datasetPaths := map[protocol.DatasetType]string{
+		protocol.DatasetMenuItems:        v.GetString("datasets.menuItems"),
+		protocol.DatasetStores:           v.GetString("datasets.stores"),
+		protocol.DatasetTransactionItems: v.GetString("datasets.transactionItems"),
+		protocol.DatasetTransactions:     v.GetString("datasets.transactions"),
+		protocol.DatasetUsers:            v.GetString("datasets.users"),
+	}
+
 	clientConfig := client.ClientConfig{
 		ServerAddress:  v.GetString("server.address"),
 		ID:             v.GetString("id"),
 		LoopAmount:     v.GetInt("loop.amount"),
 		LoopPeriod:     v.GetDuration("loop.period"),
 		BatchMaxAmount: v.GetInt("batch.maxAmount"),
-		Agency:         v.GetInt("id"), // Agency is same as client ID
+		DatasetPaths:   datasetPaths,
+		OutputDir:      v.GetString("output.dir"),
 	}
 
 	// Set default batch size if not configured or is less than 2
@@ -120,12 +137,16 @@ func main() {
 		log.Infof("action: config | result: default_batch_size | batch_max_amount: %d", clientConfig.BatchMaxAmount)
 	}
 
-	// Set CSV file path from environment variable (set by docker-compose)
-	clientConfig.CSVFile = v.GetString("csv.file")
+	if clientConfig.OutputDir == "" {
+		clientConfig.OutputDir = "./output"
+	}
 
 	client := client.NewClient(clientConfig)
+	if client == nil {
+		log.Criticalf("action: init_client | result: fail | msg: failed to initialize client")
+		return
+	}
 
-	// Always use CSV batch processing
-	client.StartClientWithCSV()
+	client.StartClientWithDatasets()
 
 }

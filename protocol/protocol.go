@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -21,15 +20,11 @@ func SerializeMessage(message interface{}) ([]byte, error) {
 
 	case *BatchMessage:
 		data = append(data, byte(MessageTypeBatch))
-		content := fmt.Sprintf("%d|%d|%d", msg.Agency, boolToInt(msg.EOF), len(msg.Bets))
-		for _, bet := range msg.Bets {
-			content += fmt.Sprintf("|%s|%s|%s|%s|%d", bet.Nombre, bet.Apellido, bet.Documento, bet.Nacimiento, bet.Numero)
+		data = append(data, byte(msg.DatasetType))
+		content := fmt.Sprintf("%d|%d", boolToInt(msg.EOF), len(msg.Records))
+		for _, record := range msg.Records {
+			content += "|" + record.Serialize()
 		}
-		data = append(data, []byte(content)...)
-
-	case *GetWinnersMessage:
-		data = append(data, byte(MessageTypeGetWinners))
-		content := fmt.Sprintf("%d", msg.Agency)
 		data = append(data, []byte(content)...)
 
 	default:
@@ -45,44 +40,24 @@ func DeserializeMessage(data []byte) (interface{}, error) {
 		return nil, fmt.Errorf("empty message")
 	}
 
-	msgType := MessageType(data[0])
 	content := string(data[1:])
-
-	switch msgType {
-	case MessageTypeResponse:
-		return parseResponseMessage(content)
-	default:
-		return nil, fmt.Errorf("unsupported message type: %d", msgType)
-	}
+	return parseResponseMessage(content)
 }
 
 // parseResponseMessage parses response message from pipe-delimited content
 func parseResponseMessage(content string) (*ResponseMessage, error) {
 	parts := strings.Split(content, "|")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid response format")
 	}
 
 	success := parts[0] == "1"
 	errorMsg := parts[1]
 
-	winnerCount, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return nil, fmt.Errorf("invalid winner count: %w", err)
-	}
-
-	var winners []string
-	for i := 3; i < 3+winnerCount && i < len(parts); i++ {
-		if parts[i] != "" {
-			winners = append(winners, parts[i])
-		}
-	}
-
 	return &ResponseMessage{
 		Type:    MessageTypeResponse,
 		Success: success,
 		Error:   errorMsg,
-		Winners: winners,
 	}, nil
 }
 
