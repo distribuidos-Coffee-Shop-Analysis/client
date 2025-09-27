@@ -115,7 +115,8 @@ func (f *FileManager) createMenuItemRecord(record []string) (protocol.MenuItemRe
 
 	for i := range record {
 		record[i] = strings.TrimSpace(record[i])
-		if record[i] == "" {
+		// available_from and available_to can be empty
+		if record[i] == "" && i != common.CSV_AVAILABLE_FROM && i != common.CSV_AVAILABLE_TO {
 			return protocol.MenuItemRecord{}, fmt.Errorf("field %d is empty", i)
 		}
 	}
