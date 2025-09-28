@@ -115,7 +115,8 @@ func (f *FileManager) createMenuItemRecord(record []string) (protocol.MenuItemRe
 
 	for i := range record {
 		record[i] = strings.TrimSpace(record[i])
-		if record[i] == "" {
+		// available_from and available_to can be empty
+		if record[i] == "" && i != common.CSV_AVAILABLE_FROM && i != common.CSV_AVAILABLE_TO {
 			return protocol.MenuItemRecord{}, fmt.Errorf("field %d is empty", i)
 		}
 	}
@@ -194,7 +195,8 @@ func (f *FileManager) createTransactionRecord(record []string) (protocol.Transac
 
 	for i := range record {
 		record[i] = strings.TrimSpace(record[i])
-		if record[i] == "" {
+		// voucher_id and user_id can be empty
+		if record[i] == "" && i != common.CSV_TXN_VOUCHER_ID && i != common.CSV_TXN_USER_ID {
 			return protocol.TransactionRecord{}, fmt.Errorf("field %d is empty", i)
 		}
 	}

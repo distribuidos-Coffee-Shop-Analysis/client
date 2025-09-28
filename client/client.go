@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -39,7 +40,7 @@ type Client struct {
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config:       config,
-		shutdownChan: make(chan struct{}), 
+		shutdownChan: make(chan struct{}),
 	}
 
 	// Setup signal handler for graceful shutdown
@@ -51,7 +52,7 @@ func NewClient(config ClientConfig) *Client {
 		<-sigChan
 		log.Infof("action: shutdown | result: in_progress | client_id: %v | msg: received SIGTERM", client.config.ID)
 
-		// Closing the channel notifies the receivers 
+		// Closing the channel notifies the receivers
 		// we have to shutdown the program
 		close(client.shutdownChan)
 
@@ -136,14 +137,71 @@ func (c *Client) StartClientWithDatasets() {
 }
 
 func (c *Client) processDataset(datasetType protocol.DatasetType, csvPath string) error {
-	// Create appropriate FileManager based on dataset type
+	fileInfo, err := os.Stat(csvPath)
+	if err != nil {
+		return fmt.Errorf("failed to access path %s: %w", csvPath, err)
+	}
+
+	if fileInfo.IsDir() {
+		return c.processDirectory(datasetType, csvPath)
+	}
+
 	fileManager, err := c.createFileManager(datasetType, csvPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file manager: %w", err)
 	}
 	defer fileManager.Close()
 
-	return c.processRecordsFromFile(datasetType, fileManager)
+	return c.processRecordsFromFile(datasetType, fileManager, true)
+}
+
+// processDirectory processes all CSV files in a directory for the given dataset type
+func (c *Client) processDirectory(datasetType protocol.DatasetType, dirPath string) error {
+
+	files, err := filepath.Glob(filepath.Join(dirPath, "*.csv"))
+	if err != nil {
+		return fmt.Errorf("failed to list CSV files in directory %s: %w", dirPath, err)
+	}
+
+	if len(files) == 0 {
+		return fmt.Errorf("no CSV files found in directory %s", dirPath)
+	}
+
+	log.Infof("action: process_directory | result: start | client_id: %v | dataset_type: %d | directory: %s | files_count: %d",
+		c.config.ID, datasetType, dirPath, len(files))
+
+	for i, filePath := range files {
+		select {
+		case <-c.shutdownChan:
+			log.Infof("action: shutdown_received | result: exiting_directory | client_id: %v", c.config.ID)
+			return nil
+		default:
+		}
+
+		isLastFile := (i == len(files)-1)
+		log.Infof("action: process_file | result: start | client_id: %v | dataset_type: %d | file: %s | is_last: %v",
+			c.config.ID, datasetType, filePath, isLastFile)
+
+		fileManager, err := c.createFileManager(datasetType, filePath)
+		if err != nil {
+			return fmt.Errorf("failed to create file manager for %s: %w", filePath, err)
+		}
+
+		err = c.processRecordsFromFile(datasetType, fileManager, isLastFile)
+		fileManager.Close()
+
+		if err != nil {
+			return fmt.Errorf("failed to process file %s: %w", filePath, err)
+		}
+
+		log.Infof("action: process_file | result: success | client_id: %v | dataset_type: %d | file: %s",
+			c.config.ID, datasetType, filePath)
+	}
+
+	log.Infof("action: process_directory | result: success | client_id: %v | dataset_type: %d | directory: %s",
+		c.config.ID, datasetType, dirPath)
+
+	return nil
 }
 
 func (c *Client) createFileManager(datasetType protocol.DatasetType, csvPath string) (*FileManager, error) {
@@ -163,7 +221,7 @@ func (c *Client) createFileManager(datasetType protocol.DatasetType, csvPath str
 	}
 }
 
-func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileManager *FileManager) error {
+func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileManager *FileManager, isLastFile bool) error {
 	var currentBatch []protocol.Record
 	validCount := 0
 
@@ -216,7 +274,7 @@ func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileMa
 
 	// Send final batch if there are remaining records
 	if len(currentBatch) > 0 {
-		if err := c.sendBatch(datasetType, currentBatch, true); err != nil {
+		if err := c.sendBatch(datasetType, currentBatch, isLastFile); err != nil {
 			log.Errorf("action: send_last_batch | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			return err
 		}
