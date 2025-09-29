@@ -12,8 +12,6 @@ services:
       - ./client/datasets:/datasets   
     networks:
       - testing_net
-    depends_on:
-      - server
 
 networks:
   testing_net:
