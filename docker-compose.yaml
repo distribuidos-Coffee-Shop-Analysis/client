@@ -15,7 +15,5 @@ services:
 
 networks:
   coffee_net:
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.25.125.0/24
+    external: true
+    name: connection-node_coffee_net
