@@ -1,6 +1,6 @@
 id: "client_001"
 server:
-  address: "host.docker.internal:12345"
+  address: "connection-node:12345"
 loop:
   amount: 5
   period: "5s"
