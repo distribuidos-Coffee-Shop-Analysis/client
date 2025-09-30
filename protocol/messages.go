@@ -187,6 +187,7 @@ func (q Q4Record) GetType() DatasetType {
 type BatchMessage struct {
 	Type        MessageType
 	DatasetType DatasetType
+	BatchIndex  int
 	Records     []Record
 	EOF         bool
 }
@@ -198,10 +199,11 @@ type ResponseMessage struct {
 	Error   string
 }
 
-func NewBatchMessage(datasetType DatasetType, records []Record, eof bool) *BatchMessage {
+func NewBatchMessage(datasetType DatasetType, batchIndex int, records []Record, eof bool) *BatchMessage {
 	return &BatchMessage{
 		Type:        MessageTypeBatch,
 		DatasetType: datasetType,
+		BatchIndex:  batchIndex,
 		Records:     records,
 		EOF:         eof,
 	}
