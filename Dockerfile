@@ -16,7 +16,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -o bin/client github.com/distribu
 
 FROM busybox:latest
 COPY --from=builder /build/bin/client /client
-COPY --from=builder /build/config.yaml /config.yaml
-COPY --from=builder /build/datasets /datasets
 RUN mkdir -p /output
+
 ENTRYPOINT ["/client"]
