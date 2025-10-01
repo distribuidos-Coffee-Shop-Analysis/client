@@ -1,8 +1,7 @@
 name: tp0
 services:
   client:
-    container_name: client1
-    image: client:latest
+    build: .
     entrypoint: /client
     environment:
       - CLI_ID=1
