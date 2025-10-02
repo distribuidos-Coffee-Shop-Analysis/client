@@ -259,7 +259,7 @@ func (l *Listener) writeCSVHeader(writer *csv.Writer, datasetType protocol.Datas
 	case protocol.DatasetQ3: // 12
 		header = []string{"year_half", "store_name", "tpv"}
 	case protocol.DatasetQ4: // 16
-		header = []string{"store_name", "birthdate"}
+		header = []string{"store_name", "purchases_qty", "birthdate"}
 	default:
 		return fmt.Errorf("unknown dataset type: %d", datasetType)
 	}
@@ -287,7 +287,7 @@ func (l *Listener) writeRecordToCSV(writer *csv.Writer, record protocol.Record) 
 
 	// Q4 Records
 	case *protocol.Q4JoinedWithStoreAndUserRecord:
-		row = []string{r.StoreName, r.Birthdate}
+		row = []string{r.StoreName, r.PurchasesQty, r.Birthdate}
 
 	default:
 		return fmt.Errorf("unsupported record type: %T", record)
