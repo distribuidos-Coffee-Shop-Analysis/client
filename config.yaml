@@ -14,5 +14,5 @@ datasets:
   menuItems: "./datasets/menu_items/menu_items.csv"
   stores: "./datasets/stores/stores.csv"
   transactionItems: "./datasets/transaction_items/"
-  # transactions: "./datasets/transactions/"
+  transactions: "./datasets/transactions/"
   # users: "./datasets/users/"

@@ -45,7 +45,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("datasets", "menuItems")
 	v.BindEnv("datasets", "stores")
 	v.BindEnv("datasets", "transactionItems")
-	// v.BindEnv("datasets", "transactions")
+	v.BindEnv("datasets", "transactions")
 	// v.BindEnv("datasets", "users")
 
 	// Try to read configuration from config file. If config file
@@ -117,7 +117,7 @@ func main() {
 		protocol.DatasetMenuItems:        v.GetString("datasets.menuItems"),
 		protocol.DatasetStores:           v.GetString("datasets.stores"),
 		protocol.DatasetTransactionItems: v.GetString("datasets.transactionItems"),
-		// protocol.DatasetTransactions:     v.GetString("datasets.transactions"),
+		protocol.DatasetTransactions:     v.GetString("datasets.transactions"),
 		// protocol.DatasetUsers:            v.GetString("datasets.users"),
 	}
 
