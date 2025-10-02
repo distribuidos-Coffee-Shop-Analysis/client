@@ -188,21 +188,21 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 			csvWriter.Flush()
 		}
 
-		if batchMessage.EOF {
-			queriesCompleted[datasetType] = true
-			var queryNum int
-			switch datasetType {
-			case protocol.DatasetQ1:
-				queryNum = 1
-			case protocol.DatasetQ2:
-				queryNum = 2
-			case protocol.DatasetQ3:
-				queryNum = 3
-			case protocol.DatasetQ4:
-				queryNum = 4
-			}
-			l.log.Infof("action: receive_query | result: complete | client_id: %v | query: Q%d", l.clientID, queryNum)
-		}
+		// if batchMessage.EOF {
+		// 	queriesCompleted[datasetType] = true
+		// 	var queryNum int
+		// 	switch datasetType {
+		// 	case protocol.DatasetQ1:
+		// 		queryNum = 1
+		// 	case protocol.DatasetQ2:
+		// 		queryNum = 2
+		// 	case protocol.DatasetQ3:
+		// 		queryNum = 3
+		// 	case protocol.DatasetQ4:
+		// 		queryNum = 4
+		// 	}
+		// 	l.log.Infof("action: receive_query | result: complete | client_id: %v | query: Q%d", l.clientID, queryNum)
+		// }
 	}
 
 	l.log.Infof("action: receive_queries | result: success | client_id: %v | msg: all queries received", l.clientID)

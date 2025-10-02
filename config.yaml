@@ -15,4 +15,4 @@ datasets:
   stores: "./datasets/stores/stores.csv"
   transactionItems: "./datasets/transaction_items/"
   transactions: "./datasets/transactions/"
-  # users: "./datasets/users/"
+  users: "./datasets/users/"

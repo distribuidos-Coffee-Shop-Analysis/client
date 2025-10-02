@@ -46,7 +46,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("datasets", "stores")
 	v.BindEnv("datasets", "transactionItems")
 	v.BindEnv("datasets", "transactions")
-	// v.BindEnv("datasets", "users")
+	v.BindEnv("datasets", "users")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -118,7 +118,7 @@ func main() {
 		protocol.DatasetStores:           v.GetString("datasets.stores"),
 		protocol.DatasetTransactionItems: v.GetString("datasets.transactionItems"),
 		protocol.DatasetTransactions:     v.GetString("datasets.transactions"),
-		// protocol.DatasetUsers:            v.GetString("datasets.users"),
+		protocol.DatasetUsers:            v.GetString("datasets.users"),
 	}
 
 	clientConfig := client.ClientConfig{
