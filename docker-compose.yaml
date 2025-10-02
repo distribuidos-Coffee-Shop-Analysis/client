@@ -1,15 +1,15 @@
 name: tp0
 services:
   client:
-    container_name: client1
-    image: client:latest
+    build: .
     entrypoint: /client
     environment:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
     volumes:
       - ./config.yaml:/config.yaml 
-      - ./datasets:/datasets   
+      - ./datasets:/datasets
+      - ./output:/output   
     networks:
       - coffee_net
 

@@ -146,6 +146,9 @@ func (c *Client) processDataset(datasetType protocol.DatasetType, csvPath string
 		return c.processDirectory(datasetType, csvPath)
 	}
 
+	// Reset batch index counter for this CSV file
+	c.writer.ResetBatchIndex(datasetType)
+
 	fileManager, err := c.createFileManager(datasetType, csvPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file manager: %w", err)
@@ -181,6 +184,9 @@ func (c *Client) processDirectory(datasetType protocol.DatasetType, dirPath stri
 		isLastFile := (i == len(files)-1)
 		log.Infof("action: process_file | result: start | client_id: %v | dataset_type: %d | file: %s | is_last: %v",
 			c.config.ID, datasetType, filePath, isLastFile)
+
+		// Reset batch index counter for this CSV file
+		c.writer.ResetBatchIndex(datasetType)
 
 		fileManager, err := c.createFileManager(datasetType, filePath)
 		if err != nil {
