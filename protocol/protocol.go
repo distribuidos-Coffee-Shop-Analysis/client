@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -36,28 +37,184 @@ func SerializeMessage(message interface{}) ([]byte, error) {
 
 // DeserializeMessage parses custom protocol data into a message
 func DeserializeMessage(data []byte) (interface{}, error) {
-	if len(data) < 1 {
-		return nil, fmt.Errorf("empty message")
+	if len(data) < 2 {
+		return nil, fmt.Errorf("message too short")
 	}
 
-	content := string(data[1:])
-	return parseResponseMessage(content)
+	messageType := MessageType(data[0])
+
+	if messageType != MessageTypeBatch {
+		return nil, fmt.Errorf("unsupported message type: %d", messageType)
+	}
+
+	datasetType := DatasetType(data[1])
+	content := string(data[2:])
+
+	return parseResponseMessage(datasetType, content)
 }
 
 // parseResponseMessage parses response message from pipe-delimited content
-func parseResponseMessage(content string) (*ResponseMessage, error) {
-	parts := strings.Split(content, "|")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid response format")
+func parseResponseMessage(datasetType DatasetType, content string) (*BatchMessage, error) {
+	if len(content) < 1 {
+		return nil, fmt.Errorf("invalid batch message: too short")
 	}
 
-	success := parts[0] == "1"
-	errorMsg := parts[1]
+	contentParts := strings.Split(content, "|")
 
-	return &ResponseMessage{
-		Type:    MessageTypeResponse,
-		Success: success,
-		Error:   errorMsg,
+	if len(contentParts) < 3 {
+		return nil, fmt.Errorf("invalid batch message format: missing BatchIndex, EOF or RecordCount")
+	}
+
+	batchIndex := 0
+	if len(contentParts) > 0 {
+		if val := contentParts[0]; val != "" {
+			fmt.Sscanf(val, "%d", &batchIndex)
+		}
+	}
+
+	eof := false
+	if len(contentParts) > 1 {
+		eof = contentParts[1] == "1"
+	}
+
+	recordCount := 0
+	if len(contentParts) > 2 {
+		fmt.Sscanf(contentParts[2], "%d", &recordCount)
+	}
+
+	// Parse records based on dataset type
+	records := make([]Record, 0, recordCount)
+
+	// Q2 uses special dual format, others use standard format
+	var dataParts []string
+	if datasetType == DatasetQ2 {
+		dataParts = contentParts[2:] // Skip only BatchIndex and EOF for Q2
+	} else {
+		dataParts = contentParts[3:] // Skip BatchIndex, EOF and RecordCount for others
+	}
+
+	// Determine record type and fields per record based on dataset type
+	switch datasetType {
+	case DatasetQ1:
+		// Q1: transaction_id, final_amount
+		for i := 0; i < recordCount; i++ {
+			startIdx := i * Q1RecordParts
+			endIdx := startIdx + Q1RecordParts
+			if endIdx <= len(dataParts) {
+				recordFields := dataParts[startIdx:endIdx]
+				record, err := NewQ1RecordFromParts(recordFields)
+				if err != nil {
+					fmt.Printf("Error parsing Q1 record %d: %v\n", i, err)
+					continue
+				}
+				records = append(records, record)
+			}
+		}
+	case DatasetQ2:
+		// Q2 dual format: BatchIndex|EOF|Count1|Records1|Count2|Records2
+		fmt.Printf("action: parse_q2_dual | content_parts: %d | data_parts: %d\n", len(contentParts), len(dataParts))
+
+		if len(dataParts) < 2 {
+			return nil, fmt.Errorf("invalid Q2 dual format: insufficient data parts")
+		}
+
+		// Parse count of best selling records
+		count1, err := strconv.Atoi(dataParts[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid Q2 best selling count: %v", err)
+		}
+		fmt.Printf("action: parse_q2_best_selling | count: %d\n", count1)
+
+		currentIdx := 1
+
+		// Parse best selling records
+		for i := 0; i < count1; i++ {
+			endIdx := currentIdx + Q2BestSellingWithNameRecordParts
+			if endIdx > len(dataParts) {
+				return nil, fmt.Errorf("insufficient data for Q2 best selling record %d", i)
+			}
+			recordFields := dataParts[currentIdx:endIdx]
+			record, err := NewQ2BestSellingWithNameRecordFromParts(recordFields)
+			if err != nil {
+				fmt.Printf("action: parse_q2_best_selling | index: %d | error: %v\n", i, err)
+				currentIdx = endIdx
+				continue
+			}
+			fmt.Printf("action: parse_q2_best_selling | index: %d | year_month: %s | item_name: %s | qty: %s\n",
+				i, record.YearMonth, record.ItemName, record.SellingsQty)
+			records = append(records, record)
+			currentIdx = endIdx
+		}
+
+		// Parse count of most profits records
+		if currentIdx >= len(dataParts) {
+			return nil, fmt.Errorf("missing Q2 most profits count")
+		}
+		count2, err := strconv.Atoi(dataParts[currentIdx])
+		if err != nil {
+			return nil, fmt.Errorf("invalid Q2 most profits count: %v", err)
+		}
+		fmt.Printf("action: parse_q2_most_profits | count: %d\n", count2)
+		currentIdx++
+
+		// Parse most profits records
+		for i := 0; i < count2; i++ {
+			endIdx := currentIdx + Q2MostProfitsWithNameRecordParts
+			if endIdx > len(dataParts) {
+				return nil, fmt.Errorf("insufficient data for Q2 most profits record %d", i)
+			}
+			recordFields := dataParts[currentIdx:endIdx]
+			record, err := NewQ2MostProfitsWithNameRecordFromParts(recordFields)
+			if err != nil {
+				fmt.Printf("action: parse_q2_most_profits | index: %d | error: %v\n", i, err)
+				currentIdx = endIdx
+				continue
+			}
+			fmt.Printf("action: parse_q2_most_profits | index: %d | year_month: %s | item_name: %s | profit: %s\n",
+				i, record.YearMonth, record.ItemName, record.ProfitSum)
+			records = append(records, record)
+			currentIdx = endIdx
+		}
+	case DatasetQ3:
+		// Q3: year_half_created_at, store_name, tpv
+		for i := 0; i < recordCount; i++ {
+			startIdx := i * Q3JoinedRecordParts
+			endIdx := startIdx + Q3JoinedRecordParts
+			if endIdx <= len(dataParts) {
+				recordFields := dataParts[startIdx:endIdx]
+				record, err := NewQ3JoinedRecordFromParts(recordFields)
+				if err != nil {
+					fmt.Printf("Error parsing Q3 record %d: %v\n", i, err)
+					continue
+				}
+				records = append(records, record)
+			}
+		}
+	case DatasetQ4:
+		// Q4: store_name, birthdate
+		for i := 0; i < recordCount; i++ {
+			startIdx := i * Q4JoinedWithStoreAndUserRecordParts
+			endIdx := startIdx + Q4JoinedWithStoreAndUserRecordParts
+			if endIdx <= len(dataParts) {
+				recordFields := dataParts[startIdx:endIdx]
+				record, err := NewQ4JoinedWithStoreAndUserRecordFromParts(recordFields)
+				if err != nil {
+					fmt.Printf("Error parsing Q4 record %d: %v\n", i, err)
+					continue
+				}
+				records = append(records, record)
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unknown dataset type for queries: %d", datasetType)
+	}
+
+	return &BatchMessage{
+		Type:        MessageTypeBatch,
+		DatasetType: datasetType,
+		BatchIndex:  batchIndex,
+		Records:     records,
+		EOF:         eof,
 	}, nil
 }
 
@@ -121,11 +278,11 @@ func RecvMessage(conn net.Conn, v interface{}) error {
 
 	// Copy to destination
 	switch dst := v.(type) {
-	case *ResponseMessage:
-		if src, ok := message.(*ResponseMessage); ok {
+	case *BatchMessage:
+		if src, ok := message.(*BatchMessage); ok {
 			*dst = *src
 		} else {
-			return fmt.Errorf("type mismatch: expected ResponseMessage")
+			return fmt.Errorf("type mismatch: expected BatchMessage")
 		}
 	default:
 		return fmt.Errorf("unsupported destination type")
