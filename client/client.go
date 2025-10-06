@@ -97,12 +97,32 @@ func (c *Client) createClientSocket() error {
 
 // Main function:
 // It processes the CSV files in streaming mode. Just store one batch in memory at a time
-// Once the CSVs are fully processed, listen from the server for the query responses.
+// The listener goroutine runs in parallel to receive query responses while sending data.
 // Finally, we close the connection and the CSV file
 
 func (c *Client) StartClientWithDatasets() {
 	defer c.conn.Close() // Close the connection
 
+	// Start listening for query responses in a separate goroutine BEFORE sending datasets
+	// This allows the client to receive responses while still sending data
+	listenerErrorChan := make(chan error, 1)
+
+	log.Infof("action: start_listening_goroutine | result: start | client_id: %v | msg: starting parallel listener", c.config.ID)
+
+	go func() {
+		log.Infof("action: listener_goroutine | result: running | client_id: %v | msg: waiting for query responses", c.config.ID)
+
+		if err := c.listener.ReceiveQueryResponses(c.shutdownChan); err != nil {
+			log.Errorf("action: receive_queries | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			listenerErrorChan <- err
+			return
+		}
+
+		log.Infof("action: listener_goroutine | result: success | client_id: %v | msg: all query responses received", c.config.ID)
+		listenerErrorChan <- nil
+	}()
+
+	// Now send all datasets while the listener goroutine receives responses in parallel
 	for datasetType, csvPath := range c.config.DatasetPaths {
 		select {
 		case <-c.shutdownChan:
@@ -124,16 +144,19 @@ func (c *Client) StartClientWithDatasets() {
 			c.config.ID, datasetType)
 	}
 
-	log.Infof("action: process_all_datasets | result: success | client_id: %v", c.config.ID)
+	log.Infof("action: process_all_datasets | result: success | client_id: %v | msg: all datasets sent, waiting for listener to finish", c.config.ID)
 
-	// After sending all datasets, start listening for query responses
-	log.Infof("action: start_listening | result: start | client_id: %v | msg: waiting for query responses", c.config.ID)
-	if err := c.listener.ReceiveQueryResponses(c.shutdownChan); err != nil {
-		log.Errorf("action: receive_queries | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
+	// Wait for the listener goroutine to finish
+	select {
+	case err := <-listenerErrorChan:
+		if err != nil {
+			log.Errorf("action: wait_for_listener | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		} else {
+			log.Infof("action: wait_for_listener | result: success | client_id: %v", c.config.ID)
+		}
+	case <-c.shutdownChan:
+		log.Infof("action: shutdown_received | result: exiting_wait | client_id: %v", c.config.ID)
 	}
-
-	log.Infof("action: start_listening | result: success | client_id: %v | msg: all query responses received", c.config.ID)
 }
 
 func (c *Client) processDataset(datasetType protocol.DatasetType, csvPath string) error {
@@ -185,8 +208,8 @@ func (c *Client) processDirectory(datasetType protocol.DatasetType, dirPath stri
 		log.Infof("action: process_file | result: start | client_id: %v | dataset_type: %d | file: %s | is_last: %v",
 			c.config.ID, datasetType, filePath, isLastFile)
 
-		// Reset batch index counter for this CSV file
-		c.writer.ResetBatchIndex(datasetType)
+		// // Reset batch index counter for this CSV file
+		// c.writer.ResetBatchIndex(datasetType)
 
 		fileManager, err := c.createFileManager(datasetType, filePath)
 		if err != nil {

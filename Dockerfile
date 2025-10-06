@@ -11,7 +11,7 @@ RUN mkdir -p /build
 WORKDIR /build/
 COPY . .
 # CGO_ENABLED must be disabled to run go binary in Alpine
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -o bin/client github.com/distribuidos-Coffee-Shop-Analysis/client
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -o bin/client .
 
 
 FROM busybox:latest

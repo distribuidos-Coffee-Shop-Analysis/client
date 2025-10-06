@@ -31,7 +31,7 @@ func NewWriter(conn net.Conn, clientID string) *Writer {
 
 // ResetBatchIndex resets the batch index counter for a specific dataset
 func (w *Writer) ResetBatchIndex(datasetType protocol.DatasetType) {
-	w.batchIndexes[datasetType] = 0
+	w.batchIndexes[datasetType] = 1
 }
 
 func (w *Writer) SendMenuItemBatch(records []protocol.MenuItemRecord, eof bool) error {
