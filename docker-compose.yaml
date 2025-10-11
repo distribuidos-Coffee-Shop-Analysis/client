@@ -7,7 +7,7 @@ services:
       - CLI_ID=${CLI_ID}
       - CLI_LOG_LEVEL=DEBUG
     volumes:
-      - ./config.yaml:/config.yaml 
+      - ./${CONFIG_FILE:-config.yaml}:/config.yaml 
       - ./datasets:/datasets
       - ./output:/output   
     networks:
