@@ -1,10 +1,10 @@
-name: tp0
 services:
   client:
+    container_name: client-${CLIENT_NUM:-1}
     build: .
     entrypoint: /client
     environment:
-      - CLI_ID=1
+      - CLI_ID=${CLI_ID}
       - CLI_LOG_LEVEL=DEBUG
     volumes:
       - ./config.yaml:/config.yaml 

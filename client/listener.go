@@ -171,7 +171,7 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 		}
 
 		if batchMessage.EOF {
-			queriesCompleted[datasetType] = true
+			// queriesCompleted[datasetType] = true
 			var queryNum int
 			switch datasetType {
 			case protocol.DatasetQ1:

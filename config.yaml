@@ -1,4 +1,4 @@
-id: "client_001"
+id: "client_2"
 server:
   address: "connection-node:12345"
 loop:
@@ -13,6 +13,6 @@ output:
 datasets:
   menuItems: "./datasets/menu_items/menu_items.csv"
   stores: "./datasets/stores/stores.csv"
-  transactionItems: "./datasets/transaction_items/"
-  transactions: "./datasets/transactions/"
+  transactionItems: "./datasets/transaction_items_short/"
+  transactions: "./datasets/transactions_short/"
   users: "./datasets/users/"
