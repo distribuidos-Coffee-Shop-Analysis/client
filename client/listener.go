@@ -139,20 +139,16 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 		// Handle writing records - Q2 needs special handling
 		if datasetType == protocol.DatasetQ2 {
 			// Write Q2 records to separate files
-			for i, record := range batchMessage.Records {
+			for _, record := range batchMessage.Records {
 				switch r := record.(type) {
 				case *protocol.Q2BestSellingWithNameRecord:
 					if err := l.writeRecordToQ2BestSelling(q2BestSellingWriter, r); err != nil {
 						return fmt.Errorf("failed to write Q2 best selling record: %w", err)
 					}
-					l.log.Debugf("action: write_q2_best_selling | client_id: %v | record_index: %d | year_month: %s | item_name: %s | qty: %s",
-						l.clientID, i, r.YearMonth, r.ItemName, r.SellingsQty)
 				case *protocol.Q2MostProfitsWithNameRecord:
 					if err := l.writeRecordToQ2MostProfits(q2MostProfitsWriter, r); err != nil {
 						return fmt.Errorf("failed to write Q2 most profits record: %w", err)
 					}
-					l.log.Debugf("action: write_q2_most_profits | client_id: %v | record_index: %d | year_month: %s | item_name: %s | profit: %s",
-						l.clientID, i, r.YearMonth, r.ItemName, r.ProfitSum)
 				default:
 					l.log.Errorf("action: write_q2_record | result: error | client_id: %v | msg: unexpected record type: %T", l.clientID, record)
 				}
@@ -161,48 +157,35 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 			// Flush both Q2 writers
 			q2BestSellingWriter.Flush()
 			q2MostProfitsWriter.Flush()
-
-			l.log.Debugf("action: receive_batch | result: success | client_id: %v | query: Q2 | records_in_batch: %d",
-				l.clientID, len(batchMessage.Records))
 		} else {
 			// Handle other queries normally
 			csvWriter := csvWriters[datasetType]
-			var queryNum int
-			switch datasetType {
-			case protocol.DatasetQ1:
-				queryNum = 1
-			case protocol.DatasetQ3:
-				queryNum = 3
-			case protocol.DatasetQ4:
-				queryNum = 4
-			}
 
-			for i, record := range batchMessage.Records {
+			for _, record := range batchMessage.Records {
 				if err := l.writeRecordToCSV(csvWriter, record); err != nil {
 					return fmt.Errorf("failed to write record for query %d: %w", datasetType, err)
 				}
-				l.log.Debugf("action: write_record | client_id: %v | query: Q%d | record_index: %d | record_type: %T",
-					l.clientID, queryNum, i, record)
 			}
 
 			csvWriter.Flush()
 		}
 
-		// if batchMessage.EOF {
-		// 	queriesCompleted[datasetType] = true
-		// 	var queryNum int
-		// 	switch datasetType {
-		// 	case protocol.DatasetQ1:
-		// 		queryNum = 1
-		// 	case protocol.DatasetQ2:
-		// 		queryNum = 2
-		// 	case protocol.DatasetQ3:
-		// 		queryNum = 3
-		// 	case protocol.DatasetQ4:
-		// 		queryNum = 4
-		// 	}
-		// 	l.log.Infof("action: receive_query | result: complete | client_id: %v | query: Q%d", l.clientID, queryNum)
-		// }
+		if batchMessage.EOF {
+			queriesCompleted[datasetType] = true
+			var queryNum int
+			switch datasetType {
+			case protocol.DatasetQ1:
+				queryNum = 1
+			case protocol.DatasetQ2:
+				queryNum = 2
+			case protocol.DatasetQ3:
+				queryNum = 3
+			case protocol.DatasetQ4:
+				queryNum = 4
+			}
+			l.log.Infof("action: write_record | result: complete | client_id: %v | query: Q%d | total_records: %d",
+				l.clientID, queryNum, len(batchMessage.Records))
+		}
 	}
 
 	l.log.Infof("action: receive_queries | result: success | client_id: %v | msg: all queries received", l.clientID)
