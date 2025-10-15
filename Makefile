@@ -85,6 +85,26 @@ example-3-up:
 	CLIENT_NUM=3 CLI_ID=client_3 CONFIG_FILE=config_example_3.yaml docker compose -p client-3 up --build
 .PHONY: example-3-up
 
+example-4-up:
+	@cp config.yaml config_example_4.yaml
+	@sed -i.bak 's|id: ".*"|id: "client_4"|' config_example_4.yaml
+	@sed -i.bak 's|transactionItems: ".*"|transactionItems: "./datasets/transaction_items_example_4/"|' config_example_4.yaml
+	@sed -i.bak 's|transactions: ".*"|transactions: "./datasets/transactions_example_4/"|' config_example_4.yaml
+	@rm -f config_example_4.yaml.bak
+	@echo "Starting EXAMPLE 4: client_4 (container: client-4, datasets: example_4)"
+	CLIENT_NUM=4 CLI_ID=client_4 CONFIG_FILE=config_example_4.yaml docker compose -p client-4 up --build
+.PHONY: example-4-up
+
+example-5-up:
+	@cp config.yaml config_example_5.yaml
+	@sed -i.bak 's|id: ".*"|id: "client_5"|' config_example_5.yaml
+	@sed -i.bak 's|transactionItems: ".*"|transactionItems: "./datasets/transaction_items_example_5/"|' config_example_5.yaml
+	@sed -i.bak 's|transactions: ".*"|transactions: "./datasets/transactions_example_5/"|' config_example_5.yaml
+	@rm -f config_example_5.yaml.bak
+	@echo "Starting EXAMPLE 5: client_5 (container: client-5, datasets: example_5)"
+	CLIENT_NUM=5 CLI_ID=client_5 CONFIG_FILE=config_example_5.yaml docker compose -p client-5 up --build
+.PHONY: example-5-up
+
 example-down:
 	@echo "Stopping all example clients..."
 	@docker compose -p client-1 -f docker-compose.yaml stop -t 1 2>/dev/null || true
@@ -140,3 +160,5 @@ docker-compose-logs:
 # make docker-compose-up-short CLIENT_NUM=1
 
 # make example-1-up
+
+# make docker-compose-up CLIENT_NUM=1
