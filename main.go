@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -137,9 +138,14 @@ func main() {
 		log.Infof("action: config | result: default_batch_size | batch_max_amount: %d", clientConfig.BatchMaxAmount)
 	}
 
-	if clientConfig.OutputDir == "" {
-		clientConfig.OutputDir = "./output"
+	// Set output directory with client-specific subdirectory
+	baseOutputDir := clientConfig.OutputDir
+	if baseOutputDir == "" {
+		baseOutputDir = "./output"
 	}
+	// Append client ID to create per-client output directory (e.g., ./output/client_001/)
+	clientConfig.OutputDir = filepath.Join(baseOutputDir, clientConfig.ID)
+	log.Infof("action: config | result: output_dir | path: %s", clientConfig.OutputDir)
 
 	client := client.NewClient(clientConfig)
 	if client == nil {

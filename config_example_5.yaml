@@ -13,6 +13,6 @@ output:
 datasets:
   menuItems: "./datasets/menu_items/menu_items.csv"
   stores: "./datasets/stores/stores.csv"
-  transactionItems: "./datasets/transaction_items/"
-  transactions: "./datasets/transactions/"
+  transactionItems: "./datasets/transaction_items_example_5/"
+  transactions: "./datasets/transactions_example_5/"
   users: "./datasets/users/"
