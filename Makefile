@@ -121,13 +121,58 @@ example-down:
 	@echo "All example clients stopped, temporary configs removed, and main config reset"
 .PHONY: example-down
 
+clean:
+	@rm -rf output/*
+	@echo "Output directory cleaned successfully"
+.PHONY: clean
+
+sort-answers:
+	@echo "Sorting answers directory..."
+	@python3 scripts/sort_results.py answers
+.PHONY: sort-answers
+
+sort-output:
+	@echo "Sorting output for client $(CLIENT_NUM)..."
+	@python3 scripts/sort_results.py output/client_$(CLIENT_NUM)
+.PHONY: sort-output
+
+compare-results:
+	@echo "Comparing results for client $(CLIENT_NUM) against answers..."
+	@python3 scripts/compare_results.py answers output/client_$(CLIENT_NUM)
+.PHONY: compare-results
+
+compare-results-diff:
+	@echo "Comparing results for client $(CLIENT_NUM) against answers (with diff)..."
+	@python3 scripts/compare_results.py answers output/client_$(CLIENT_NUM) --show-diff
+.PHONY: compare-results-diff
+
+run:
+	@./scripts/run_and_validate.sh $(CLIENT_NUM) normal
+.PHONY: run
+
+run-short:
+	@./scripts/run_and_validate.sh $(CLIENT_NUM) short
+.PHONY: run-short
+
 help:
 	@echo "Available commands:"
 	@echo ""
+	@echo "Basic execution:"
 	@echo "  make docker-compose-up              - Run with NORMAL datasets (default CLIENT_NUM=1)"
 	@echo "  make docker-compose-up-short        - Run with SHORT datasets (default CLIENT_NUM=1)"
 	@echo "  make docker-compose-down            - Stop and clean up containers (default CLIENT_NUM=1)"
 	@echo "  make docker-compose-logs            - Follow container logs (default CLIENT_NUM=1)"
+	@echo "  make clean                          - Clean all files from output directory"
+	@echo ""
+	@echo "🚀 Automated execution with validation:"
+	@echo "  make run-and-validate CLIENT_NUM=1  - Run client + auto sort + auto compare"
+	@echo "  make run-and-validate-short CLIENT_NUM=1 - Run with SHORT datasets + validation"
+	@echo ""
+	@echo "Manual validation:"
+	@echo "  make sort-answers                   - Sort CSV files in answers directory"
+	@echo "  make sort-output CLIENT_NUM=1       - Sort CSV files in output/client_1 directory"
+	@echo "  make compare-results CLIENT_NUM=1   - Compare sorted results with answers"
+	@echo "  make compare-results-diff CLIENT_NUM=1  - Compare with detailed diff output"
 	@echo ""
 	@echo "Multi-client testing (each client runs in isolated containers):"
 	@echo "  make docker-compose-up CLIENT_NUM=1        - Run as client_1 (container: client-1, output: ./output/client_1/)"
@@ -162,3 +207,5 @@ docker-compose-logs:
 # make example-1-up
 
 # make docker-compose-up CLIENT_NUM=1
+
+# make run CLIENT_NUM=1

@@ -193,6 +193,8 @@ func (c *Client) processDirectory(datasetType protocol.DatasetType, dirPath stri
 		return fmt.Errorf("no CSV files found in directory %s", dirPath)
 	}
 
+	c.writer.ResetBatchIndex(datasetType)
+
 	log.Infof("action: process_directory | result: start | client_id: %v | dataset_type: %d | directory: %s | files_count: %d",
 		c.config.ID, datasetType, dirPath, len(files))
 

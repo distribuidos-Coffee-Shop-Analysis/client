@@ -8,6 +8,7 @@ import (
 type BatchMessage struct {
 	Type        MessageType
 	DatasetType DatasetType
+	ClientID    string
 	BatchIndex  int
 	Records     []Record
 	EOF         bool
@@ -298,10 +299,11 @@ func NewQ4JoinedWithStoreAndUserRecordFromParts(parts []string) (*Q4JoinedWithSt
 	}, nil
 }
 
-func NewBatchMessage(datasetType DatasetType, batchIndex int, records []Record, eof bool) *BatchMessage {
+func NewBatchMessage(datasetType DatasetType, batchIndex int, records []Record, eof bool, clientID string) *BatchMessage {
 	return &BatchMessage{
 		Type:        MessageTypeBatch,
 		DatasetType: datasetType,
+		ClientID:    clientID,
 		BatchIndex:  batchIndex,
 		Records:     records,
 		EOF:         eof,

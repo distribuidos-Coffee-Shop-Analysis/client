@@ -10,6 +10,7 @@ import (
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/client"
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/common"
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/protocol"
+	"github.com/google/uuid"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -122,9 +123,12 @@ func main() {
 		protocol.DatasetUsers:            v.GetString("datasets.users"),
 	}
 
+	clientUUID := uuid.New().String()
+	log.Infof("action: generate_uuid | result: success | client_uuid: %s", clientUUID)
+
 	clientConfig := client.ClientConfig{
 		ServerAddress:  v.GetString("server.address"),
-		ID:             v.GetString("id"),
+		ID:             clientUUID,
 		LoopAmount:     v.GetInt("loop.amount"),
 		LoopPeriod:     v.GetDuration("loop.period"),
 		BatchMaxAmount: v.GetInt("batch.maxAmount"),
@@ -143,9 +147,12 @@ func main() {
 	if baseOutputDir == "" {
 		baseOutputDir = "./output"
 	}
-	// Append client ID to create per-client output directory (e.g., ./output/client_001/)
-	clientConfig.OutputDir = filepath.Join(baseOutputDir, clientConfig.ID)
-	log.Infof("action: config | result: output_dir | path: %s", clientConfig.OutputDir)
+	configID := v.GetString("id")
+	if configID == "" {
+		configID = "client_default"
+	}
+	clientConfig.OutputDir = filepath.Join(baseOutputDir, configID)
+	log.Infof("action: config | result: output_dir | path: %s | client_uuid: %s", clientConfig.OutputDir, clientConfig.ID)
 
 	client := client.NewClient(clientConfig)
 	if client == nil {
