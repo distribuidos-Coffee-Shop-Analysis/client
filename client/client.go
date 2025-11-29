@@ -283,9 +283,10 @@ func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileMa
 
 		// Check if adding this record would exceed size or count limits
 		testBatch := append(currentBatch, record)
-		batchSize := c.calculateBatchSize(datasetType, testBatch)
+		// batchSize := c.calculateBatchSize(datasetType, testBatch)
+		// || batchSize > common.MAX_BATCH_SIZE_BYTES
 
-		if len(testBatch) > c.config.BatchMaxAmount || batchSize > common.MAX_BATCH_SIZE_BYTES {
+		if len(testBatch) > c.config.BatchMaxAmount {
 			if err := c.sendBatch(datasetType, currentBatch, false); err != nil {
 				if errors.Is(err, syscall.EPIPE) {
 					log.Infof("Connection closed by server (broken pipe)")

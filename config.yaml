@@ -1,4 +1,4 @@
-id: "client_1"
+id: "client_3"
 server:
   address: "connection-node:12345"
 loop:
@@ -7,12 +7,12 @@ loop:
 log:
   level: "INFO"
 batch:
-  maxAmount: 50
+  maxAmount: 1500
 output:
   dir: "./output"
 datasets:
   menuItems: "./datasets/menu_items/menu_items.csv"
   stores: "./datasets/stores/stores.csv"
-  transactionItems: "./datasets/transaction_items_short/"
-  transactions: "./datasets/transactions_short/"
+  transactionItems: "./datasets/transaction_items/"
+  transactions: "./datasets/transactions/"
   users: "./datasets/users/"

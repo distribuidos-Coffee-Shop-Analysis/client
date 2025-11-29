@@ -24,6 +24,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$PROJECT_DIR/output/client_$CLIENT_NUM"
 
+# Start timer
+START_TIME=$(date +%s)
+
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Client Execution ${NC}"
 echo -e "${BLUE}========================================${NC}"
@@ -92,13 +95,16 @@ python3 "$SCRIPT_DIR/compare_results.py" "$ANSWERS_DIR" "$OUTPUT_DIR"
 
 COMPARE_EXIT=$?
 
+# Calculate elapsed time
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+MINUTES=$((ELAPSED / 60))
+SECONDS=$((ELAPSED % 60))
+
 echo ""
 echo -e "${BLUE}========================================${NC}"
-if [ $COMPARE_EXIT -eq 0 ]; then
-    echo -e "${GREEN}✅ Todos los resultados son los esperados${NC}"
-else
-    echo -e "${YELLOW}⚠️  Termina con diferencias${NC}"
-fi
+echo -e "${BLUE}Tiempo total de ejecución: ${GREEN}${MINUTES}m ${SECONDS}s${NC}"
 echo -e "${BLUE}========================================${NC}"
+echo ""
 
 exit $COMPARE_EXIT

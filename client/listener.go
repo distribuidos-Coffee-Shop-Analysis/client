@@ -71,6 +71,8 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 	queriesCompleted := make(map[protocol.DatasetType]bool)
 	eofCounts := make(map[protocol.DatasetType]int)
 
+	q1SeenTransactions := make(map[string]bool)
+
 	for len(queriesCompleted) < TOTAL_QUERIES_EXPECTED {
 		select {
 		case <-shutdownChan:
@@ -164,6 +166,15 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 			csvWriter := csvWriters[datasetType]
 
 			for _, record := range batchMessage.Records {
+				if datasetType == protocol.DatasetQ1 {
+					if q1Record, ok := record.(*protocol.Q1Record); ok {
+						if q1SeenTransactions[q1Record.TransactionID] {
+							continue
+						}
+						q1SeenTransactions[q1Record.TransactionID] = true
+					}
+				}
+
 				if err := l.writeRecordToCSV(csvWriter, record); err != nil {
 					return fmt.Errorf("failed to write record for query %d: %w", datasetType, err)
 				}

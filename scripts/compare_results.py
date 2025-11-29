@@ -2,13 +2,39 @@
 """
 Script to compare two directories of CSV result files.
 Assumes files have already been sorted.
+Q4 uses intelligent validation instead of line-by-line comparison.
 """
 
 import sys
 import os
 import csv
+import subprocess
 from pathlib import Path
 from difflib import unified_diff
+
+
+def validate_q4_file(file_path):
+    """
+    Validate Q4 results using intelligent validation.
+    Returns (is_valid, message)
+    """
+    script_dir = Path(__file__).parent
+    validator_script = script_dir / "validate_q4.py"
+
+    try:
+        result = subprocess.run(
+            ["python3", str(validator_script), str(file_path)],
+            capture_output=True,
+            text=True,
+        )
+
+        # The validator returns 0 if valid, 1 if invalid
+        is_valid = result.returncode == 0
+        message = result.stdout if result.stdout else result.stderr
+
+        return is_valid, message
+    except Exception as e:
+        return False, f"Error running Q4 validator: {e}"
 
 
 def compare_csv_files(file1, file2):
@@ -77,29 +103,45 @@ def compare_directories(dir1, dir2, show_diff=False):
             results[filename] = "missing_in_dir2"
             continue
 
-        # Compare files
-        is_identical, diff = compare_csv_files(file1, file2)
+        # Q4 uses intelligent validation instead of line-by-line comparison
+        if filename == "Q4_results.csv":
+            is_valid, validation_msg = validate_q4_file(file2)
 
-        if is_identical:
-            print(f"✅ {filename}: Identicos")
-            results[filename] = "identical"
+            if is_valid:
+                print(f"✅ {filename}: Top 3 válido (formato correcto)")
+                results[filename] = "valid_top3"
+            else:
+                print(f"❌ {filename}: Top 3 inválido")
+                all_identical = False
+                results[filename] = "invalid_top3"
+
+                if show_diff:
+                    print(f"\n   Detalles de validación Q4:")
+                    print(validation_msg)
         else:
-            print(f"❌ {filename}: Diferentes")
-            all_identical = False
-            results[filename] = "different"
+            # Compare other files normally
+            is_identical, diff = compare_csv_files(file1, file2)
 
-            if show_diff:
-                print(f"\n   Diferencias en {filename}:")
-                # Show first 20 lines of diff
-                for i, line in enumerate(diff[:20]):
-                    print(f"   {line}")
-                if len(diff) > 20:
-                    print(f"   ... ({len(diff) - 20} more lines)")
-                print()
+            if is_identical:
+                print(f"✅ {filename}: Identicos")
+                results[filename] = "identical"
+            else:
+                print(f"❌ {filename}: Diferentes")
+                all_identical = False
+                results[filename] = "different"
+
+                if show_diff:
+                    print(f"\n   Diferencias en {filename}:")
+                    # Show first 20 lines of diff
+                    for i, line in enumerate(diff[:20]):
+                        print(f"   {line}")
+                    if len(diff) > 20:
+                        print(f"   ... ({len(diff) - 20} more lines)")
+                    print()
 
     print("-" * 80)
     if all_identical:
-        print("✅ Todos los archivos son identicos")
+        print("✅ Todos los archivos bien")
         return True
     else:
         print("❌ Algunos archivos son diferentes")

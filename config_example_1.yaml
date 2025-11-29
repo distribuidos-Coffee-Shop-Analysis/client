@@ -7,7 +7,7 @@ loop:
 log:
   level: "INFO"
 batch:
-  maxAmount: 50
+  maxAmount: 1500
 output:
   dir: "./output"
 datasets:
