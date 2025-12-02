@@ -31,7 +31,7 @@ func NewWriter(conn net.Conn, clientID string) *Writer {
 
 // ResetBatchIndex resets the batch index counter for a specific dataset
 func (w *Writer) ResetBatchIndex(datasetType protocol.DatasetType) {
-	w.batchIndexes[datasetType] = 1
+	w.batchIndexes[datasetType] = -1
 }
 
 func (w *Writer) SendMenuItemBatch(records []protocol.MenuItemRecord, eof bool) error {
@@ -42,7 +42,7 @@ func (w *Writer) SendMenuItemBatch(records []protocol.MenuItemRecord, eof bool) 
 
 	// Increment batch index before creating the message
 	w.batchIndexes[protocol.DatasetMenuItems]++
-	batchMessage := protocol.NewBatchMessage(protocol.DatasetMenuItems, w.batchIndexes[protocol.DatasetMenuItems], recordInterfaces, eof)
+	batchMessage := protocol.NewBatchMessage(protocol.DatasetMenuItems, w.batchIndexes[protocol.DatasetMenuItems], recordInterfaces, eof, w.clientID)
 	err := w.sendBatch(batchMessage)
 	if err != nil {
 		// Decrement on error so retry uses same index
@@ -59,7 +59,7 @@ func (w *Writer) SendStoreBatch(records []protocol.StoreRecord, eof bool) error 
 
 	// Increment batch index before creating the message
 	w.batchIndexes[protocol.DatasetStores]++
-	batchMessage := protocol.NewBatchMessage(protocol.DatasetStores, w.batchIndexes[protocol.DatasetStores], recordInterfaces, eof)
+	batchMessage := protocol.NewBatchMessage(protocol.DatasetStores, w.batchIndexes[protocol.DatasetStores], recordInterfaces, eof, w.clientID)
 	err := w.sendBatch(batchMessage)
 	if err != nil {
 		// Decrement on error so retry uses same index
@@ -76,7 +76,7 @@ func (w *Writer) SendTransactionItemBatch(records []protocol.TransactionItemReco
 
 	// Increment batch index before creating the message
 	w.batchIndexes[protocol.DatasetTransactionItems]++
-	batchMessage := protocol.NewBatchMessage(protocol.DatasetTransactionItems, w.batchIndexes[protocol.DatasetTransactionItems], recordInterfaces, eof)
+	batchMessage := protocol.NewBatchMessage(protocol.DatasetTransactionItems, w.batchIndexes[protocol.DatasetTransactionItems], recordInterfaces, eof, w.clientID)
 	err := w.sendBatch(batchMessage)
 	if err != nil {
 		// Decrement on error so retry uses same index
@@ -93,7 +93,7 @@ func (w *Writer) SendTransactionBatch(records []protocol.TransactionRecord, eof 
 
 	// Increment batch index before creating the message
 	w.batchIndexes[protocol.DatasetTransactions]++
-	batchMessage := protocol.NewBatchMessage(protocol.DatasetTransactions, w.batchIndexes[protocol.DatasetTransactions], recordInterfaces, eof)
+	batchMessage := protocol.NewBatchMessage(protocol.DatasetTransactions, w.batchIndexes[protocol.DatasetTransactions], recordInterfaces, eof, w.clientID)
 	err := w.sendBatch(batchMessage)
 	if err != nil {
 		// Decrement on error so retry uses same index
@@ -110,7 +110,7 @@ func (w *Writer) SendUserBatch(records []protocol.UserRecord, eof bool) error {
 
 	// Increment batch index before creating the message
 	w.batchIndexes[protocol.DatasetUsers]++
-	batchMessage := protocol.NewBatchMessage(protocol.DatasetUsers, w.batchIndexes[protocol.DatasetUsers], recordInterfaces, eof)
+	batchMessage := protocol.NewBatchMessage(protocol.DatasetUsers, w.batchIndexes[protocol.DatasetUsers], recordInterfaces, eof, w.clientID)
 	err := w.sendBatch(batchMessage)
 	if err != nil {
 		// Decrement on error so retry uses same index
@@ -144,7 +144,7 @@ func (w *Writer) CalculateMenuItemBatchSize(records []protocol.MenuItemRecord) i
 		recordInterfaces[i] = record
 	}
 
-	batch := protocol.NewBatchMessage(protocol.DatasetMenuItems, w.batchIndexes[protocol.DatasetMenuItems], recordInterfaces, false)
+	batch := protocol.NewBatchMessage(protocol.DatasetMenuItems, w.batchIndexes[protocol.DatasetMenuItems], recordInterfaces, false, w.clientID)
 	data, err := protocol.SerializeMessage(batch)
 	if err != nil {
 		return 0
@@ -158,7 +158,7 @@ func (w *Writer) CalculateStoreBatchSize(records []protocol.StoreRecord) int {
 		recordInterfaces[i] = record
 	}
 
-	batch := protocol.NewBatchMessage(protocol.DatasetStores, w.batchIndexes[protocol.DatasetStores], recordInterfaces, false)
+	batch := protocol.NewBatchMessage(protocol.DatasetStores, w.batchIndexes[protocol.DatasetStores], recordInterfaces, false, w.clientID)
 	data, err := protocol.SerializeMessage(batch)
 	if err != nil {
 		return 0
@@ -172,7 +172,7 @@ func (w *Writer) CalculateTransactionItemBatchSize(records []protocol.Transactio
 		recordInterfaces[i] = record
 	}
 
-	batch := protocol.NewBatchMessage(protocol.DatasetTransactionItems, w.batchIndexes[protocol.DatasetTransactionItems], recordInterfaces, false)
+	batch := protocol.NewBatchMessage(protocol.DatasetTransactionItems, w.batchIndexes[protocol.DatasetTransactionItems], recordInterfaces, false, w.clientID)
 	data, err := protocol.SerializeMessage(batch)
 	if err != nil {
 		return 0
@@ -186,7 +186,7 @@ func (w *Writer) CalculateTransactionBatchSize(records []protocol.TransactionRec
 		recordInterfaces[i] = record
 	}
 
-	batch := protocol.NewBatchMessage(protocol.DatasetTransactions, w.batchIndexes[protocol.DatasetTransactions], recordInterfaces, false)
+	batch := protocol.NewBatchMessage(protocol.DatasetTransactions, w.batchIndexes[protocol.DatasetTransactions], recordInterfaces, false, w.clientID)
 	data, err := protocol.SerializeMessage(batch)
 	if err != nil {
 		return 0
@@ -200,7 +200,7 @@ func (w *Writer) CalculateUserBatchSize(records []protocol.UserRecord) int {
 		recordInterfaces[i] = record
 	}
 
-	batch := protocol.NewBatchMessage(protocol.DatasetUsers, w.batchIndexes[protocol.DatasetUsers], recordInterfaces, false)
+	batch := protocol.NewBatchMessage(protocol.DatasetUsers, w.batchIndexes[protocol.DatasetUsers], recordInterfaces, false, w.clientID)
 	data, err := protocol.SerializeMessage(batch)
 	if err != nil {
 		return 0

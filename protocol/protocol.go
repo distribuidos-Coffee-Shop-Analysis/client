@@ -22,7 +22,7 @@ func SerializeMessage(message interface{}) ([]byte, error) {
 	case *BatchMessage:
 		data = append(data, byte(MessageTypeBatch))
 		data = append(data, byte(msg.DatasetType))
-		content := fmt.Sprintf("%d|%d|%d", msg.BatchIndex, boolToInt(msg.EOF), len(msg.Records))
+		content := fmt.Sprintf("%s|%d|%d|%d", msg.ClientID, msg.BatchIndex, boolToInt(msg.EOF), len(msg.Records))
 		for _, record := range msg.Records {
 			content += "|" + record.Serialize()
 		}

@@ -20,6 +20,7 @@ type Listener struct {
 }
 
 const TOTAL_QUERIES_EXPECTED = 4
+const Q4_EOF_COUNT_EXPECTED = 5 // Q4 has 5 joiners, each sends an EOF
 
 // NewListener creates a new Listener instance
 func NewListener(conn net.Conn, clientID string, outputDir string) *Listener {
@@ -68,6 +69,9 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 	}()
 
 	queriesCompleted := make(map[protocol.DatasetType]bool)
+	eofCounts := make(map[protocol.DatasetType]int)
+
+	q1SeenTransactions := make(map[string]bool)
 
 	for len(queriesCompleted) < TOTAL_QUERIES_EXPECTED {
 		select {
@@ -162,6 +166,15 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 			csvWriter := csvWriters[datasetType]
 
 			for _, record := range batchMessage.Records {
+				if datasetType == protocol.DatasetQ1 {
+					if q1Record, ok := record.(*protocol.Q1Record); ok {
+						if q1SeenTransactions[q1Record.TransactionID] {
+							continue
+						}
+						q1SeenTransactions[q1Record.TransactionID] = true
+					}
+				}
+
 				if err := l.writeRecordToCSV(csvWriter, record); err != nil {
 					return fmt.Errorf("failed to write record for query %d: %w", datasetType, err)
 				}
@@ -171,7 +184,8 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 		}
 
 		if batchMessage.EOF {
-			// queriesCompleted[datasetType] = true
+			eofCounts[datasetType]++
+
 			var queryNum int
 			switch datasetType {
 			case protocol.DatasetQ1:
@@ -183,8 +197,20 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 			case protocol.DatasetQ4:
 				queryNum = 4
 			}
-			l.log.Infof("action: write_record | result: complete | client_id: %v | query: Q%d | total_records: %d",
-				l.clientID, queryNum, len(batchMessage.Records))
+
+			l.log.Infof("action: write_record | result: eof_received | client_id: %v | query: Q%d | eof_count: %d | batch_records: %d",
+				l.clientID, queryNum, eofCounts[datasetType], len(batchMessage.Records))
+
+			expectedEOFCount := 1
+			if datasetType == protocol.DatasetQ4 {
+				expectedEOFCount = Q4_EOF_COUNT_EXPECTED
+			}
+
+			if eofCounts[datasetType] >= expectedEOFCount {
+				queriesCompleted[datasetType] = true
+				l.log.Infof("action: receive_query | result: complete | client_id: %v | query: Q%d | total_eofs: %d",
+					l.clientID, queryNum, eofCounts[datasetType])
+			}
 		}
 	}
 

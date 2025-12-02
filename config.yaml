@@ -1,4 +1,4 @@
-id: "client_5"
+id: "client_3"
 server:
   address: "connection-node:12345"
 loop:
@@ -7,7 +7,7 @@ loop:
 log:
   level: "INFO"
 batch:
-  maxAmount: 50
+  maxAmount: 1500
 output:
   dir: "./output"
 datasets:

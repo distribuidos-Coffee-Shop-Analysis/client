@@ -193,6 +193,8 @@ func (c *Client) processDirectory(datasetType protocol.DatasetType, dirPath stri
 		return fmt.Errorf("no CSV files found in directory %s", dirPath)
 	}
 
+	c.writer.ResetBatchIndex(datasetType)
+
 	log.Infof("action: process_directory | result: start | client_id: %v | dataset_type: %d | directory: %s | files_count: %d",
 		c.config.ID, datasetType, dirPath, len(files))
 
@@ -281,9 +283,10 @@ func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileMa
 
 		// Check if adding this record would exceed size or count limits
 		testBatch := append(currentBatch, record)
-		batchSize := c.calculateBatchSize(datasetType, testBatch)
+		// batchSize := c.calculateBatchSize(datasetType, testBatch)
+		// || batchSize > common.MAX_BATCH_SIZE_BYTES
 
-		if len(testBatch) > c.config.BatchMaxAmount || batchSize > common.MAX_BATCH_SIZE_BYTES {
+		if len(testBatch) > c.config.BatchMaxAmount {
 			if err := c.sendBatch(datasetType, currentBatch, false); err != nil {
 				if errors.Is(err, syscall.EPIPE) {
 					log.Infof("Connection closed by server (broken pipe)")
