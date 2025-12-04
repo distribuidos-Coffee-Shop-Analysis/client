@@ -16,10 +16,11 @@ import (
 
 // Listener handles receiving query responses from the server and writing to CSV files
 type Listener struct {
-	conn      net.Conn
-	clientID  string
-	outputDir string
-	log       *logging.Logger
+	conn             net.Conn
+	clientID         string
+	outputDir        string
+	log              *logging.Logger
+	queriesCompleted int
 }
 
 const TOTAL_QUERIES_EXPECTED = 4
@@ -28,11 +29,17 @@ const Q4_EOF_COUNT_EXPECTED = 5 // Q4 has 5 joiners, each sends an EOF
 // NewListener creates a new Listener instance
 func NewListener(conn net.Conn, clientID string, outputDir string) *Listener {
 	return &Listener{
-		conn:      conn,
-		clientID:  clientID,
-		outputDir: outputDir,
-		log:       log,
+		conn:             conn,
+		clientID:         clientID,
+		outputDir:        outputDir,
+		log:              log,
+		queriesCompleted: 0,
 	}
+}
+
+// GetQueriesCompleted returns the number of queries that were fully received
+func (l *Listener) GetQueriesCompleted() int {
+	return l.queriesCompleted
 }
 
 func isConnectionError(err error) bool {
@@ -235,6 +242,7 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}, streamErr
 
 			if eofCounts[datasetType] >= expectedEOFCount {
 				queriesCompleted[datasetType] = true
+				l.queriesCompleted++
 				l.log.Infof("action: receive_query | result: complete | client_id: %v | query: Q%d | total_eofs: %d",
 					l.clientID, queryNum, eofCounts[datasetType])
 			}

@@ -108,7 +108,13 @@ func (c *Client) StartClientWithDatasets() {
 
 	defer func() {
 		if !completedSuccessfully {
-			log.Infof("action: cleanup_output | result: start | client_id: %v | msg: cleaning up incomplete output files", c.config.ID)
+			queriesCompleted := c.listener.GetQueriesCompleted()
+			if queriesCompleted > 0 {
+				log.Infof("action: cleanup_output | result: skipped | client_id: %v | queries_completed: %d | msg: preserving partial results",
+					c.config.ID, queriesCompleted)
+				return
+			}
+			log.Infof("action: cleanup_output | result: start | client_id: %v | queries_completed: 0 | msg: cleaning up incomplete output files", c.config.ID)
 			if err := c.cleanupOutputDir(); err != nil {
 				log.Errorf("action: cleanup_output | result: fail | client_id: %v | error: %v", c.config.ID, err)
 			} else {
