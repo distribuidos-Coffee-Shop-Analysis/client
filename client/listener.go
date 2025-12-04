@@ -2,10 +2,13 @@ package client
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/distribuidos-Coffee-Shop-Analysis/client/protocol"
 	"github.com/op/go-logging"
@@ -32,8 +35,25 @@ func NewListener(conn net.Conn, clientID string, outputDir string) *Listener {
 	}
 }
 
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
 // Waits for and processes query responses from the server
-func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
+func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}, streamErrorChan <-chan error) error {
 	l.log.Infof("action: receive_queries | result: in_progress | client_id: %v | msg: waiting for query responses", l.clientID)
 
 	// Keep track of open CSV writers for each query type
@@ -78,11 +98,18 @@ func (l *Listener) ReceiveQueryResponses(shutdownChan <-chan struct{}) error {
 		case <-shutdownChan:
 			l.log.Infof("action: receive_queries | result: shutdown | client_id: %v", l.clientID)
 			return nil
+		case err := <-streamErrorChan:
+			l.log.Infof("action: receive_queries | result: stream_error | client_id: %v | error: %v", l.clientID, err)
+			return fmt.Errorf("stream error from writer: %w", err)
 		default:
 		}
 
 		var batchMessage protocol.BatchMessage
 		if err := protocol.RecvMessage(l.conn, &batchMessage); err != nil {
+			if isConnectionError(err) {
+				l.log.Errorf("action: receive_queries | result: connection_closed | client_id: %v | error: %v", l.clientID, err)
+				return fmt.Errorf("connection closed abruptly: %w", err)
+			}
 			return fmt.Errorf("failed to receive batch message: %w", err)
 		}
 

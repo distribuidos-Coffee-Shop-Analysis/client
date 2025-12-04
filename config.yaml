@@ -1,4 +1,4 @@
-id: "client_3"
+id: "client_1"
 server:
   address: "connection-node:12345"
 loop:
