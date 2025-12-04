@@ -29,18 +29,20 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	config       ClientConfig
-	conn         net.Conn
-	shutdownChan chan struct{}
-	writer       *Writer
-	listener     *Listener
+	config          ClientConfig
+	conn            net.Conn
+	shutdownChan    chan struct{}
+	streamErrorChan chan error
+	writer          *Writer
+	listener        *Listener
 }
 
 // NewClient Initializes a new client receiving the configuration
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
-		config:       config,
-		shutdownChan: make(chan struct{}),
+		config:          config,
+		shutdownChan:    make(chan struct{}),
+		streamErrorChan: make(chan error, 1),
 	}
 
 	// Setup signal handler for graceful shutdown
@@ -102,6 +104,18 @@ func (c *Client) createClientSocket() error {
 
 func (c *Client) StartClientWithDatasets() {
 	defer c.conn.Close() // Close the connection
+	completedSuccessfully := false
+
+	defer func() {
+		if !completedSuccessfully {
+			log.Infof("action: cleanup_output | result: start | client_id: %v | msg: cleaning up incomplete output files", c.config.ID)
+			if err := c.cleanupOutputDir(); err != nil {
+				log.Errorf("action: cleanup_output | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			} else {
+				log.Infof("action: cleanup_output | result: success | client_id: %v", c.config.ID)
+			}
+		}
+	}()
 
 	// Start listening for query responses in a separate goroutine BEFORE sending datasets
 	// This allows the client to receive responses while still sending data
@@ -112,8 +126,14 @@ func (c *Client) StartClientWithDatasets() {
 	go func() {
 		log.Infof("action: listener_goroutine | result: running | client_id: %v | msg: waiting for query responses", c.config.ID)
 
-		if err := c.listener.ReceiveQueryResponses(c.shutdownChan); err != nil {
+		if err := c.listener.ReceiveQueryResponses(c.shutdownChan, c.streamErrorChan); err != nil {
 			log.Errorf("action: receive_queries | result: fail | client_id: %v | error: %v", c.config.ID, err)
+			// Notify about stream error to stop the writer
+			select {
+			case c.streamErrorChan <- err:
+			default:
+				// Channel already has an error, skip
+			}
 			listenerErrorChan <- err
 			return
 		}
@@ -128,6 +148,9 @@ func (c *Client) StartClientWithDatasets() {
 		case <-c.shutdownChan:
 			log.Infof("action: shutdown_received | result: exiting_datasets | client_id: %v", c.config.ID)
 			return
+		case err := <-c.streamErrorChan:
+			log.Infof("action: stream_error_received | result: exiting_datasets | client_id: %v | error: %v", c.config.ID, err)
+			return
 		default:
 		}
 
@@ -137,6 +160,11 @@ func (c *Client) StartClientWithDatasets() {
 		if err := c.processDataset(datasetType, csvPath); err != nil {
 			log.Errorf("action: process_dataset | result: fail | client_id: %v | dataset_type: %d | error: %v",
 				c.config.ID, datasetType, err)
+			// Notify about stream error
+			select {
+			case c.streamErrorChan <- err:
+			default:
+			}
 			return
 		}
 
@@ -153,9 +181,12 @@ func (c *Client) StartClientWithDatasets() {
 			log.Errorf("action: wait_for_listener | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		} else {
 			log.Infof("action: wait_for_listener | result: success | client_id: %v", c.config.ID)
+			completedSuccessfully = true
 		}
 	case <-c.shutdownChan:
 		log.Infof("action: shutdown_received | result: exiting_wait | client_id: %v", c.config.ID)
+	case err := <-c.streamErrorChan:
+		log.Errorf("action: stream_error | result: exiting_wait | client_id: %v | error: %v", c.config.ID, err)
 	}
 }
 
@@ -261,6 +292,14 @@ func (c *Client) processRecordsFromFile(datasetType protocol.DatasetType, fileMa
 		case <-c.shutdownChan:
 			log.Infof("action: shutdown_received | result: exiting_loop | client_id: %v", c.config.ID)
 			return nil
+		case err := <-c.streamErrorChan:
+			log.Infof("action: stream_error_received | result: exiting_loop | client_id: %v | error: %v", c.config.ID, err)
+			// Put the error back so the main loop can see it
+			select {
+			case c.streamErrorChan <- err:
+			default:
+			}
+			return err
 		default:
 		}
 
@@ -389,4 +428,42 @@ func (c *Client) sendBatch(datasetType protocol.DatasetType, records []protocol.
 	default:
 		return fmt.Errorf("unsupported dataset type: %d", datasetType)
 	}
+}
+
+func (c *Client) cleanupOutputDir() error {
+	outputDir := c.config.OutputDir
+	if outputDir == "" {
+		return nil
+	}
+
+	baseName := filepath.Base(outputDir)
+	if baseName == "output" || baseName == "." || baseName == ".." {
+		log.Errorf("action: cleanup_output | result: skip | client_id: %v | msg: refusing to clean root output directory: %s",
+			c.config.ID, outputDir)
+		return nil
+	}
+
+	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to read output directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			filePath := filepath.Join(outputDir, entry.Name())
+			if err := os.Remove(filePath); err != nil {
+				log.Errorf("action: cleanup_file | result: fail | client_id: %v | file: %s | error: %v",
+					c.config.ID, filePath, err)
+			} else {
+				log.Infof("action: cleanup_file | result: success | client_id: %v | file: %s",
+					c.config.ID, filePath)
+			}
+		}
+	}
+
+	return nil
 }
